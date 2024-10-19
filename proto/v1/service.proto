@@ -1,0 +1,59 @@
+syntax="proto3";
+
+package v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "sandman/protos/v1";
+
+service Timers {
+    rpc CreateTimer(Timer) returns (google.protobuf.Empty) {}
+    rpc ListTimers(ListTimersArgs) returns (ListTimersResponse) {}
+    rpc GetTimer(GetTimerArgs) returns (Timer) {}
+    rpc DeleteTimer(DeleteTimerArgs) returns (google.protobuf.Empty) {}
+}
+
+message Timer {
+	string id = 1;
+	uint32 shard_id = 2;
+	string name = 3;
+	map<string,string> labels = 4;
+	google.protobuf.Timestamp created_utc = 5;
+	google.protobuf.Timestamp due_utc = 6;
+	uint32 attempt = 7;
+	google.protobuf.Timestamp assignable_utc = 8;
+	string assigned_worker = 9;
+
+	string rpc_addr = 20;
+	string rpc_authority = 21;
+	string rpc_method = 22;
+	map<string,string> rpc_meta = 23;
+	bytes rpc_args = 24;
+
+	google.protobuf.Timestamp delivered_utc = 30;
+	uint32 delivered_status = 31;
+	string delivered_err = 32;
+}
+
+message GetTimerArgs {
+	string id = 1;
+	string name = 2;
+}
+
+message ListTimersArgs {
+	google.protobuf.Timestamp after = 1;
+	google.protobuf.Timestamp before = 2;
+	string selector = 3;
+}
+
+message DeleteTimerArgs {
+	string id = 1;
+	string name = 2;
+}
+
+message ListTimersResponse {
+	repeated Timer timers = 1;
+}
+
+message Empty {}
