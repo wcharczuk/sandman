@@ -31,7 +31,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TimersClient interface {
-	CreateTimer(ctx context.Context, in *Timer, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	CreateTimer(ctx context.Context, in *Timer, opts ...grpc.CallOption) (*IdentifierResponse, error)
 	ListTimers(ctx context.Context, in *ListTimersArgs, opts ...grpc.CallOption) (*ListTimersResponse, error)
 	GetTimer(ctx context.Context, in *GetTimerArgs, opts ...grpc.CallOption) (*Timer, error)
 	DeleteTimer(ctx context.Context, in *DeleteTimerArgs, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -46,9 +46,9 @@ func NewTimersClient(cc grpc.ClientConnInterface) TimersClient {
 	return &timersClient{cc}
 }
 
-func (c *timersClient) CreateTimer(ctx context.Context, in *Timer, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *timersClient) CreateTimer(ctx context.Context, in *Timer, opts ...grpc.CallOption) (*IdentifierResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
+	out := new(IdentifierResponse)
 	err := c.cc.Invoke(ctx, Timers_CreateTimer_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (c *timersClient) DeleteTimers(ctx context.Context, in *DeleteTimersArgs, o
 // All implementations must embed UnimplementedTimersServer
 // for forward compatibility.
 type TimersServer interface {
-	CreateTimer(context.Context, *Timer) (*emptypb.Empty, error)
+	CreateTimer(context.Context, *Timer) (*IdentifierResponse, error)
 	ListTimers(context.Context, *ListTimersArgs) (*ListTimersResponse, error)
 	GetTimer(context.Context, *GetTimerArgs) (*Timer, error)
 	DeleteTimer(context.Context, *DeleteTimerArgs) (*emptypb.Empty, error)
@@ -115,7 +115,7 @@ type TimersServer interface {
 // pointer dereference when methods are called.
 type UnimplementedTimersServer struct{}
 
-func (UnimplementedTimersServer) CreateTimer(context.Context, *Timer) (*emptypb.Empty, error) {
+func (UnimplementedTimersServer) CreateTimer(context.Context, *Timer) (*IdentifierResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateTimer not implemented")
 }
 func (UnimplementedTimersServer) ListTimers(context.Context, *ListTimersArgs) (*ListTimersResponse, error) {

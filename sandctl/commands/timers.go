@@ -108,10 +108,11 @@ func timerCreate() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("ticker create; create client: %w", err)
 			}
-			if _, err := c.CreateTimer(ctx, timer.ToProto()); err != nil {
+			res, err := c.CreateTimer(ctx, timer.ToProto())
+			if err != nil {
 				return fmt.Errorf("ticker create; failed: %w", err)
 			}
-			fmt.Println("ok!")
+			fmt.Printf("created timer %s!\n", res.GetId())
 			return nil
 		},
 	}
@@ -236,6 +237,7 @@ func timerDelete() *cli.Command {
 			if err != nil {
 				return err
 			}
+			fmt.Println("ok!")
 			return nil
 		},
 	}

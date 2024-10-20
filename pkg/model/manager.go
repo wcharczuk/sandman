@@ -177,15 +177,27 @@ func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatu
 
 var execDeleteTimerByID = fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, timerTableName)
 
-func (m Manager) DeleteTimerByID(ctx context.Context, id uuid.UUID) (err error) {
-	_, err = m.deleteTimerByID.ExecContext(ctx, id)
+func (m Manager) DeleteTimerByID(ctx context.Context, id uuid.UUID) (found bool, err error) {
+	var res sql.Result
+	res, err = m.deleteTimerByID.ExecContext(ctx, id)
+	if err != nil {
+		return
+	}
+	rows, _ := res.RowsAffected()
+	found = rows > 0
 	return
 }
 
 var execDeleteTimerByName = fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, timerTableName)
 
-func (m Manager) DeleteTimerByName(ctx context.Context, name string) (err error) {
-	_, err = m.deleteTimerByName.ExecContext(ctx, name)
+func (m Manager) DeleteTimerByName(ctx context.Context, name string) (found bool, err error) {
+	var res sql.Result
+	res, err = m.deleteTimerByName.ExecContext(ctx, name)
+	if err != nil {
+		return
+	}
+	rows, _ := res.RowsAffected()
+	found = rows > 0
 	return
 }
 

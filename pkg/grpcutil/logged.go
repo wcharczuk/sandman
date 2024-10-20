@@ -7,6 +7,7 @@ import (
 	"go.charczuk.com/sdk/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // Logged returns a unary server interceptor.
@@ -15,16 +16,26 @@ func Logged(logger *log.Logger) grpc.UnaryServerInterceptor {
 		startTime := time.Now().UTC()
 		result, err := handler(ctx, args)
 		if logger != nil {
+
 			attrs := []any{
 				log.String("method", info.FullMethod),
 				log.String("elapsed", time.Since(startTime).Round(time.Microsecond).String()),
 			}
-			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				attrs = append(attrs,
-					log.String("authority", rpcMetaValue(md, MetaKeyAuthority)),
-				)
+			if err != nil {
+				if status, ok := status.FromError(err); ok {
+					attrs = append(attrs,
+						log.String("status", status.Code().String()),
+					)
+				}
 			}
-			logger.Info("rpc", attrs...)
+			if md, ok := metadata.FromIncomingContext(ctx); ok {
+				if authority := rpcMetaValue(md, MetaKeyAuthority); authority != "" {
+					attrs = append(attrs,
+						log.String("authority", authority),
+					)
+				}
+			}
+			logger.WithGroup("RPC").Info("unary", attrs...)
 		}
 		return result, err
 	}

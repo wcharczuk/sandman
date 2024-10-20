@@ -23,7 +23,7 @@ type TimerServer struct {
 	Model *model.Manager
 }
 
-func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*emptypb.Empty, error) {
+func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sandmanv1.IdentifierResponse, error) {
 	if t.GetDueUtc() == nil || t.GetDueUtc().AsTime().Before(time.Now().UTC()) {
 		return nil, status.Error(codes.InvalidArgument, "invalid `due_utc`; must be set and in the future")
 	}
@@ -40,7 +40,6 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*empt
 		return nil, status.Error(codes.InvalidArgument, "invalid `rpc_method`; must be have '/' prefix")
 	}
 	newTimer := model.Timer{
-		ID:           uuid.V4(),
 		Name:         t.GetName(),
 		Labels:       t.GetLabels(),
 		CreatedUTC:   time.Now().UTC(),
@@ -55,7 +54,9 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*empt
 		err = status.Error(codes.Internal, err.Error())
 		return nil, err
 	}
-	return nil, nil
+	return &sandmanv1.IdentifierResponse{
+		Id: newTimer.ID.String(),
+	}, nil
 }
 
 func (s TimerServer) ListTimers(ctx context.Context, args *sandmanv1.ListTimersArgs) (*sandmanv1.ListTimersResponse, error) {
@@ -95,24 +96,27 @@ func (s TimerServer) GetTimer(ctx context.Context, args *sandmanv1.GetTimerArgs)
 }
 
 func (s TimerServer) DeleteTimer(ctx context.Context, args *sandmanv1.DeleteTimerArgs) (*emptypb.Empty, error) {
-	if !args.GetSkipExistCheck() {
-		_, err := s.getTimerByNameOrID(ctx, args.GetId(), args.GetName())
-		if err != nil {
-			return nil, err
-		}
-	}
+	var found bool
+	var err error
 	if id := args.GetId(); id != "" {
 		parsedID, err := uuid.Parse(id)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("%q is not a valid uuid", id))
 		}
-		if err := s.Model.DeleteTimerByID(ctx, parsedID); err != nil {
+		found, err = s.Model.DeleteTimerByID(ctx, parsedID)
+		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}
-	if name := args.GetName(); name != "" {
-		if err := s.Model.DeleteTimerByName(ctx, name); err != nil {
+		if !found {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("timer with id %q not found", id))
+		}
+	} else if name := args.GetName(); name != "" {
+		found, err = s.Model.DeleteTimerByName(ctx, name)
+		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !found {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("timer with name %q not found", name))
 		}
 	}
 	return nil, nil

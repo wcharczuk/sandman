@@ -8,7 +8,7 @@ import "google/protobuf/empty.proto";
 option go_package = "sandman/protos/v1";
 
 service Timers {
-    rpc CreateTimer(Timer) returns (google.protobuf.Empty) {}
+    rpc CreateTimer(Timer) returns (IdentifierResponse) {}
     rpc ListTimers(ListTimersArgs) returns (ListTimersResponse) {}
     rpc GetTimer(GetTimerArgs) returns (Timer) {}
     rpc DeleteTimer(DeleteTimerArgs) returns (google.protobuf.Empty) {}
@@ -71,7 +71,6 @@ message ListWorkersResponse {
 message DeleteTimerArgs {
 	string id = 1;
 	string name = 2;
-	bool skip_exist_check = 3;
 }
 
 message DeleteTimersArgs {
@@ -84,4 +83,6 @@ message ListTimersResponse {
 	repeated Timer timers = 1;
 }
 
-message Empty {}
+message IdentifierResponse {
+	string id = 1;
+}
