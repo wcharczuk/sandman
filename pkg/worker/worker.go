@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -93,7 +94,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-const defaultTickInterval = 60 * time.Second
+const defaultTickInterval = 10 * time.Second
 
 func (w *Worker) tickIntervalOrDefault() time.Duration {
 	if w.tickInterval > 0 {
@@ -144,7 +145,9 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 			return nil
 		}
 		ctx = metadata.NewOutgoingContext(ctx, w.metadata(t))
-		remoteErr = c.Invoke(ctx, t.RPCMethod, t.RPCArgs, nil)
+
+		res := []byte{}
+		remoteErr = c.Invoke(ctx, t.RPCMethod, t.RPCArgs, &res, grpc.ForceCodec(new(rawCodec)))
 		if remoteErr != nil {
 			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
 			deliveredStatus, deliveredErr := w.formatDeliveredStatus(remoteErr)
@@ -158,8 +161,38 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 		if internalErr != nil {
 			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark delivered: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
 		}
+
+		log.GetLogger(ctx).Info("worker; delivery success", w.logAttrs(t)...)
 		return nil
 	}
+}
+
+type rawCodec struct {
+	encoding.Codec
+}
+
+func (rc rawCodec) Name() string { return "raw" }
+
+func (rc rawCodec) Marshal(v any) ([]byte, error) {
+	switch typed := v.(type) {
+	case []byte:
+		return typed, nil
+	case string:
+		return []byte(typed), nil
+	}
+	return nil, fmt.Errorf("invalid raw type: %T", v)
+}
+
+func (rc rawCodec) Unmarshal(data []byte, v any) error {
+	switch typed := v.(type) {
+	case []byte:
+		copy(typed, data)
+		return nil
+	case *[]byte:
+		copy(*typed, data)
+		return nil
+	}
+	return fmt.Errorf("invalid raw type: %T", v)
 }
 
 func (w *Worker) logAttrs(t *model.Timer, extra ...any) []any {

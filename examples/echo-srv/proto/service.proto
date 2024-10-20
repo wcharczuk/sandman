@@ -1,0 +1,17 @@
+syntax="proto3";
+
+package echo;
+
+option go_package = "sandman/examples/echo-srv/protos";
+
+service Echo {
+	rpc Greet(GreetArgs) returns (GreetResponse) {}
+}
+
+message GreetArgs {
+	string name = 1;
+}
+
+message GreetResponse {
+	string response = 1;
+}

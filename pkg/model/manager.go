@@ -107,6 +107,9 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	return
 }
 
+// queryGetDueTimers is the query to poll for "due" timers
+//
+// when it marks timers for attempts it also advances the assignable time a minute into the future
 var queryGetDueTimers = fmt.Sprintf(`UPDATE
 	%s
 SET 
