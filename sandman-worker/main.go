@@ -26,13 +26,13 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 	},
 	Start: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
 		slant.Print(os.Stdout, "sandman-worker")
-		modelMgr := model.Manager{
+		modelMgr := &model.Manager{
 			BaseManager: dbutil.NewBaseManager(dbc),
 		}
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		w := worker.NewWorker(0, "worker", modelMgr)
+		w := worker.NewWorker("worker", modelMgr)
 		w.Vars().Publish()
 		go func() {
 			if err := http.ListenAndServe(":8080", expvar.Handler()); err != nil {

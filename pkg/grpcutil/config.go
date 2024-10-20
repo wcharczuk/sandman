@@ -8,7 +8,7 @@ import (
 
 // Config holds configuration options.
 type Config struct {
-	BindAddr string
+	BindAddr string `yaml:"bindAddr"`
 }
 
 // Resolve resolves the config.

@@ -19,9 +19,8 @@ import (
 )
 
 // NewWorker returns a new worker.
-func NewWorker(shardID uint32, identity string, mgr model.Manager) *Worker {
+func NewWorker(identity string, mgr *model.Manager) *Worker {
 	return &Worker{
-		shardID:  shardID,
 		identity: identity,
 		mgr:      mgr,
 		clients:  make(map[string]*grpc.ClientConn),
@@ -43,9 +42,8 @@ func OptTickInterval(tickInterval time.Duration) WorkerOption {
 }
 
 type Worker struct {
-	shardID  uint32
 	identity string
-	mgr      model.Manager
+	mgr      *model.Manager
 
 	parallelism  int
 	tickInterval time.Duration
@@ -79,7 +77,7 @@ func (w *Worker) Vars() WorkerVars {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
-	tick := time.NewTicker(w.tickInterval)
+	tick := time.NewTicker(w.tickIntervalOrDefault())
 	defer tick.Stop()
 	for {
 		select {

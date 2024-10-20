@@ -21,7 +21,7 @@ db:
 	@CONFIG_PATH=$(PREFIX)/_config/worker.yml go run sandman-worker/main.go -db-migrate -start=false
 
 server:
-	@CONFIG_PATH=$(PREFIX)/_config/worker.yml go run sandman-srv/main.go
+	@CONFIG_PATH=$(PREFIX)/_config/server.yml go run sandman-srv/main.go
 
 worker:
 	@CONFIG_PATH=$(PREFIX)/_config/worker.yml go run sandman-worker/main.go

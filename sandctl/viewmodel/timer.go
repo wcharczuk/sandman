@@ -11,7 +11,7 @@ import (
 
 type Timer struct {
 	Name   string            `yaml:"name"`
-	Labels map[string]string `yaml:"labels"`
+	Labels map[string]string `yaml:"labels,omitempty"`
 	DueUTC time.Time         `yaml:"due_utc"`
 	RPC    RPC               `yaml:"rpc"`
 }
@@ -32,8 +32,8 @@ func (t Timer) ToProto() *v1.Timer {
 
 type RPC struct {
 	Addr      string            `yaml:"addr"`
-	Authority string            `yaml:"authority"`
+	Authority string            `yaml:"authority,omitempty"`
 	Method    string            `yaml:"method"`
-	Meta      map[string]string `yaml:"meta"`
-	Args      string            `yaml:"args"`
+	Meta      map[string]string `yaml:"meta,omitempty"`
+	Args      string            `yaml:"args,omitempty"`
 }

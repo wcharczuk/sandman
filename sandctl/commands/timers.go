@@ -7,6 +7,7 @@ import (
 	"os"
 	v1 "sandman/proto/v1"
 	"sandman/sandctl/viewmodel"
+	"time"
 
 	"github.com/urfave/cli/v3"
 	"go.charczuk.com/sdk/cliutil"
@@ -17,9 +18,11 @@ import (
 
 func Timers() *cli.Command {
 	timers := &cli.Command{
-		Name:  "timers",
-		Usage: "Control sandman timers",
+		Name:    "timers",
+		Aliases: []string{"timer"},
+		Usage:   "Control sandman timers",
 		Commands: []*cli.Command{
+			timerGenerate(),
 			timerCreate(),
 			timerList(),
 			timerGet(),
@@ -27,6 +30,60 @@ func Timers() *cli.Command {
 		},
 	}
 	return timers
+}
+
+func timerGenerate() *cli.Command {
+	return &cli.Command{
+		Name:    "generate",
+		Aliases: []string{"gen", "g"},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "name",
+				Aliases:  []string{"n"},
+				Required: true,
+			},
+			&cli.TimestampFlag{
+				Name: "due-utc",
+			},
+			&cli.DurationFlag{
+				Name: "due-in",
+			},
+			&cli.StringMapFlag{
+				Name:    "label",
+				Aliases: []string{"l"},
+			},
+			&cli.StringFlag{
+				Name:     "rpc-address",
+				Aliases:  []string{"rpc-addr"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name: "rpc-authority",
+			},
+			&cli.StringFlag{
+				Name:     "rpc-method",
+				Required: true,
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			t := viewmodel.Timer{
+				Name:   cmd.String("name"),
+				Labels: cmd.StringMap("label"),
+				RPC: viewmodel.RPC{
+					Addr:      cmd.String("rpc-address"),
+					Authority: cmd.String("rpc-authority"),
+					Method:    cmd.String("rpc-method"),
+				},
+			}
+			if dueUTC := cmd.Timestamp("due-utc"); !dueUTC.IsZero() {
+				t.DueUTC = dueUTC
+			} else if dueIn := cmd.Duration("due-in"); dueIn > 0 {
+				t.DueUTC = time.Now().UTC().Add(dueIn)
+			}
+			_ = yaml.NewEncoder(os.Stdout).Encode(t)
+			return nil
+		},
+	}
 }
 
 func timerCreate() *cli.Command {

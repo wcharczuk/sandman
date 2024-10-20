@@ -14,7 +14,7 @@ func DefaultClientFlags(moreFlags ...cli.Flag) []cli.Flag {
 	return DefaultFlags(append([]cli.Flag{
 		&cli.StringFlag{
 			Name:  "address",
-			Value: "localhost:8888",
+			Value: "localhost:8833",
 		},
 		&cli.StringFlag{
 			Name:  "authority",

@@ -20,7 +20,7 @@ import (
 
 type TimerServer struct {
 	sandmanv1.TimersServer
-	Model model.Manager
+	Model *model.Manager
 }
 
 func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*emptypb.Empty, error) {

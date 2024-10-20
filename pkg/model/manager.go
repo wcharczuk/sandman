@@ -26,7 +26,7 @@ type Manager struct {
 	deleteTimerByName   *sql.Stmt
 }
 
-func (m Manager) Initialize(ctx context.Context) (err error) {
+func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.getDueTimers, err = m.Invoke(ctx).Prepare(queryGetDueTimers)
 	if err != nil {
 		return
@@ -62,7 +62,7 @@ func (m Manager) Initialize(ctx context.Context) (err error) {
 	return
 }
 
-var queryGetTimerByName = fmt.Sprintf(`SELECT %s FROM %s WHERE name = $1`, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
+var queryGetTimerByName = fmt.Sprintf(`SELECT %s FROM %s WHERE name = $1`, db.ColumnNamesCSV(timerColumns), timerTableName)
 
 func (m Manager) GetTimerByName(ctx context.Context, name string) (out Timer, found bool, err error) {
 	rows, err := m.getTimerByName.QueryContext(ctx, name)
@@ -80,10 +80,10 @@ func (m Manager) GetTimerByName(ctx context.Context, name string) (out Timer, fo
 var queryGetTimersDueBetween = fmt.Sprintf(`SELECT
 	%s
 FROM
-	%s as t
+	%s
 WHERE
-	t.due_utc > $1 AND t.due_tc < $2
-`, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
+	due_utc > $1 AND due_utc < $2
+`, db.ColumnNamesCSV(timerColumns), timerTableName)
 
 func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Time, s selector.Selector, opts ...db.InvocationOption) (output []Timer, err error) {
 	var rows *sql.Rows
@@ -107,21 +107,19 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	return
 }
 
-var queryGetDueTimers = fmt.Sprintf(`SELECT
+var queryGetDueTimers = fmt.Sprintf(`UPDATE
 	%s
-FROM
-	%s AS t
+SET 
+	assigned_worker = $1
+	, attempt = attempt + 1
+	, assignable_utc = current_timestamp + interval '1 minute'
 WHERE
-	t.due_utc < current_timestamp
-	AND t.attempt < 5
-	AND (t.assignable_utc IS NULL OR t.assignable_utc < current_timestamp)
-	AND t.delivered_utc IS NULL
-FOR UPDATE SET 
-	t.assigned = true
-	, t.assigned_worker = $2
-	, t.attempt = t.attempt + 1
-	, t.assignable_utc = current_timestamp + interval '1 minute'
-`, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
+	due_utc < current_timestamp
+	AND attempt < 5
+	AND (assignable_utc IS NULL OR assignable_utc < current_timestamp)
+	AND delivered_utc IS NULL
+RETURNING %s
+`, timerTableName, db.ColumnNamesCSV(timerColumns))
 
 func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
 	var rows *sql.Rows
@@ -141,7 +139,7 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (outpu
 
 var execCullTimers = fmt.Sprintf(`DELETE FROM %s 
 WHERE 
-	delivered = true
+	delivered_utc IS NOT NULL
 	OR attempt >= 5
 `, timerTableName)
 
@@ -165,8 +163,8 @@ func (m Manager) MarkDelivered(ctx context.Context, id uuid.UUID) (err error) {
 
 var execMarkAttempted = fmt.Sprintf(`UPDATE %s 
 SET 
-	delivered_status = $3
-	, delivered_err = $4
+	delivered_status = $2
+	, delivered_err = $3
 	, assignable_utc = NULL
 WHERE 
 	id = $1

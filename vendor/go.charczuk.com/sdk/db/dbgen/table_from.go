@@ -41,7 +41,7 @@ func TableFrom(obj any, extra ...string) *migration.Step {
 		} else if column.IsJSON {
 			columnDefinition = fmt.Sprintf("%s%s %s", leadingComma, column.ColumnName, "JSONB")
 		} else {
-			if column.FieldType.Kind() == reflect.Ptr {
+			if fieldTypeIsNullable(column.FieldType) {
 				columnDefinition = fmt.Sprintf("%s%s %s", leadingComma, column.ColumnName, dbTypeForFieldType(column.FieldType))
 			} else {
 				columnDefinition = fmt.Sprintf("%s%s %s NOT NULL", leadingComma, column.ColumnName, dbTypeForFieldType(column.FieldType))
@@ -71,6 +71,15 @@ func TableFrom(obj any, extra ...string) *migration.Step {
 			append(statements, extra...)...,
 		),
 	)
+}
+
+func fieldTypeIsNullable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice:
+		return true
+	default:
+		return false
+	}
 }
 
 func dbTypeForFieldType(t reflect.Type) string {
