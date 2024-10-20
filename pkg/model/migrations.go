@@ -12,7 +12,7 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 				migration.NewGroupWithAction(
 					dbgen.TableFrom(
 						Timer{},
-						dbgen.Index(Timer{}, "shard_id", "due_utc", "attempt", "assigned", "delivered"),
+						dbgen.Index(Timer{}, "due_utc", "attempt", "assignable_utc", "delivered_utc"),
 						dbgen.UniqueKey(Timer{}, "name"),
 					),
 				),

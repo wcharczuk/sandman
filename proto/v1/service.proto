@@ -12,18 +12,23 @@ service Timers {
     rpc ListTimers(ListTimersArgs) returns (ListTimersResponse) {}
     rpc GetTimer(GetTimerArgs) returns (Timer) {}
     rpc DeleteTimer(DeleteTimerArgs) returns (google.protobuf.Empty) {}
+    rpc DeleteTimers(DeleteTimersArgs) returns (google.protobuf.Empty) {}
+}
+
+service Workers {
+    rpc ListWorkers(ListWorkersArgs) returns (ListWorkersResponse) {}
 }
 
 message Timer {
 	string id = 1;
-	uint32 shard_id = 2;
-	string name = 3;
-	map<string,string> labels = 4;
-	google.protobuf.Timestamp created_utc = 5;
-	google.protobuf.Timestamp due_utc = 6;
-	uint32 attempt = 7;
-	google.protobuf.Timestamp assignable_utc = 8;
-	string assigned_worker = 9;
+	string name = 2;
+	map<string,string> labels = 3;
+	google.protobuf.Timestamp created_utc = 4;
+	google.protobuf.Timestamp due_utc = 5;
+
+	uint32 attempt = 10;
+	google.protobuf.Timestamp assignable_utc = 11;
+	string assigned_worker = 12;
 
 	string rpc_addr = 20;
 	string rpc_authority = 21;
@@ -34,6 +39,14 @@ message Timer {
 	google.protobuf.Timestamp delivered_utc = 30;
 	uint32 delivered_status = 31;
 	string delivered_err = 32;
+}
+
+message Worker {
+	string id = 1;
+	string name = 2;
+	map<string,string> labels = 3;
+	google.protobuf.Timestamp first_seen_utc = 10;
+	google.protobuf.Timestamp last_seen_utc = 11;
 }
 
 message GetTimerArgs {
@@ -47,9 +60,24 @@ message ListTimersArgs {
 	string selector = 3;
 }
 
+message ListWorkersArgs {
+	string selector = 1;
+}
+
+message ListWorkersResponse {
+	repeated Worker workers = 1;
+}
+
 message DeleteTimerArgs {
 	string id = 1;
 	string name = 2;
+	bool skip_exist_check = 3;
+}
+
+message DeleteTimersArgs {
+	google.protobuf.Timestamp after = 1;
+	google.protobuf.Timestamp before = 2;
+	map<string,string> matchLabels = 3;
 }
 
 message ListTimersResponse {

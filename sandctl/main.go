@@ -1,7 +1,15 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"os"
+	"sandman/sandctl/commands"
+
+	"go.charczuk.com/sdk/cliutil"
+)
 
 func main() {
-	fmt.Println("sandctl")
+	if err := commands.Root().Run(context.Background(), os.Args); err != nil {
+		cliutil.Fatal(err)
+	}
 }

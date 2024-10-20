@@ -4,24 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 
 	"go.charczuk.com/sdk/db"
 	"go.charczuk.com/sdk/db/dbutil"
+	"go.charczuk.com/sdk/selector"
 	"go.charczuk.com/sdk/uuid"
 )
 
 type Manager struct {
 	dbutil.BaseManager
 
-	getDueTimers   *sql.Stmt
-	getTimerByName *sql.Stmt
-	cullTimers     *sql.Stmt
-	markDelivered  *sql.Stmt
-	markAttempted  *sql.Stmt
+	getDueTimers        *sql.Stmt
+	getTimerByName      *sql.Stmt
+	getTimersDueBetween *sql.Stmt
+	cullTimers          *sql.Stmt
+	markDelivered       *sql.Stmt
+	markAttempted       *sql.Stmt
+	deleteTimerByID     *sql.Stmt
+	deleteTimerByName   *sql.Stmt
 }
 
 func (m Manager) Initialize(ctx context.Context) (err error) {
 	m.getDueTimers, err = m.Invoke(ctx).Prepare(queryGetDueTimers)
+	if err != nil {
+		return
+	}
+	m.getTimerByName, err = m.Invoke(ctx).Prepare(queryGetTimerByName)
+	if err != nil {
+		return
+	}
+	m.getTimersDueBetween, err = m.Invoke(ctx).Prepare(queryGetTimersDueBetween)
 	if err != nil {
 		return
 	}
@@ -37,25 +51,68 @@ func (m Manager) Initialize(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
+	m.deleteTimerByID, err = m.Invoke(ctx).Prepare(execDeleteTimerByID)
+	if err != nil {
+		return
+	}
+	m.deleteTimerByName, err = m.Invoke(ctx).Prepare(execDeleteTimerByName)
+	if err != nil {
+		return
+	}
 	return
 }
 
-func (m Manager) CreateTimer(ctx context.Context, t *Timer, opts ...db.InvocationOption) (err error) {
-	err = m.Invoke(ctx, opts...).Create(t)
+var queryGetTimerByName = fmt.Sprintf(`SELECT %s FROM %s WHERE name = $1`, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
+
+func (m Manager) GetTimerByName(ctx context.Context, name string) (out Timer, found bool, err error) {
+	rows, err := m.getTimerByName.QueryContext(ctx, name)
+	if err != nil {
+		err = rows.Err()
+		return
+	}
+	if !rows.Next() {
+		return
+	}
+	err = db.PopulateInOrder(&out, rows, timerColumns)
 	return
 }
 
-var timerTypeMeta = db.TypeMetaFor(Timer{})
-var timerTableName = db.TableName(Timer{})
-var timerColumns = timerTypeMeta.Columns()
+var queryGetTimersDueBetween = fmt.Sprintf(`SELECT
+	%s
+FROM
+	%s as t
+WHERE
+	t.due_utc > $1 AND t.due_tc < $2
+`, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
+
+func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Time, s selector.Selector, opts ...db.InvocationOption) (output []Timer, err error) {
+	var rows *sql.Rows
+	rows, err = m.getTimersDueBetween.QueryContext(ctx, after, before)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var t Timer
+		if err = db.PopulateInOrder(&t, rows, timerColumns); err != nil {
+			return
+		}
+		if s != nil {
+			if s.Matches(t.MatchLabels()) {
+				output = append(output, t)
+			}
+		} else {
+			output = append(output, t)
+		}
+	}
+	return
+}
 
 var queryGetDueTimers = fmt.Sprintf(`SELECT
 	%s
 FROM
 	%s AS t
 WHERE
-	t.shard_id = $1
-	AND t.due_utc < current_timestamp
+	t.due_utc < current_timestamp
 	AND t.attempt < 5
 	AND (t.assignable_utc IS NULL OR t.assignable_utc < current_timestamp)
 	AND t.delivered_utc IS NULL
@@ -66,9 +123,9 @@ FOR UPDATE SET
 	, t.assignable_utc = current_timestamp + interval '1 minute'
 `, db.ColumnNamesFromAliasCSV(timerColumns, "t"), timerTableName)
 
-func (m Manager) GetDueTimers(ctx context.Context, shardID uint32, workerIdentity string, opts ...db.InvocationOption) (output []Timer, err error) {
+func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, shardID, workerIdentity)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity)
 	if err != nil {
 		return
 	}
@@ -84,15 +141,12 @@ func (m Manager) GetDueTimers(ctx context.Context, shardID uint32, workerIdentit
 
 var execCullTimers = fmt.Sprintf(`DELETE FROM %s 
 WHERE 
-	shard_id = $1 
-	AND (
-		delivered = true
-		OR attempt >= 5
-	)
+	delivered = true
+	OR attempt >= 5
 `, timerTableName)
 
-func (m Manager) CullTimers(ctx context.Context, shardID uint32) (err error) {
-	_, err = m.cullTimers.ExecContext(ctx, shardID)
+func (m Manager) CullTimers(ctx context.Context) (err error) {
+	_, err = m.cullTimers.ExecContext(ctx)
 	return nil
 }
 
@@ -101,12 +155,11 @@ SET
 	delivered_utc = current_timestamp
 	, assignable_utc = NULL
 WHERE 
-	shard_id = $1
-	AND id = $1
+	id = $1
 `, timerTableName)
 
-func (m Manager) MarkDelivered(ctx context.Context, shardID uint32, id uuid.UUID) (err error) {
-	_, err = m.markDelivered.ExecContext(ctx, shardID, id)
+func (m Manager) MarkDelivered(ctx context.Context, id uuid.UUID) (err error) {
+	_, err = m.markDelivered.ExecContext(ctx, id)
 	return
 }
 
@@ -116,11 +169,48 @@ SET
 	, delivered_err = $4
 	, assignable_utc = NULL
 WHERE 
-	shard_id = $1
-	AND id = $1
+	id = $1
 `, timerTableName)
 
-func (m Manager) MarkAttempted(ctx context.Context, shardID uint32, id uuid.UUID, deliveredStatus uint32, deliveredErr string) (err error) {
-	_, err = m.markAttempted.ExecContext(ctx, shardID, id, deliveredStatus, deliveredErr)
+func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatus uint32, deliveredErr string) (err error) {
+	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErr)
 	return
+}
+
+var execDeleteTimerByID = fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, timerTableName)
+
+func (m Manager) DeleteTimerByID(ctx context.Context, id uuid.UUID) (err error) {
+	_, err = m.deleteTimerByID.ExecContext(ctx, id)
+	return
+}
+
+var execDeleteTimerByName = fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, timerTableName)
+
+func (m Manager) DeleteTimerByName(ctx context.Context, name string) (err error) {
+	_, err = m.deleteTimerByName.ExecContext(ctx, name)
+	return
+}
+
+func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matchLabels map[string]string) error {
+	var args []any
+	stanzas := []string{
+		fmt.Sprintf("DELETE FROM %s WHERE 1=1", timerTableName),
+	}
+	if !after.IsZero() {
+		args = append(args, after)
+		stanzas = append(stanzas, fmt.Sprintf("AND due_utc > $%d", len(args)))
+	}
+	if !before.IsZero() {
+		args = append(args, before)
+		stanzas = append(stanzas, fmt.Sprintf("AND due_utc < $%d", len(args)))
+	}
+	for key, value := range matchLabels {
+		args = append(args, key)
+		args = append(args, value)
+		stanzas = append(stanzas, fmt.Sprintf("AND labels->$%d = $%d", len(args)-1, len(args)))
+	}
+
+	statement := strings.Join(stanzas, "\n")
+	_, err := m.Invoke(ctx).Exec(statement, args...)
+	return err
 }

@@ -20,10 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Timers_CreateTimer_FullMethodName = "/v1.Timers/CreateTimer"
-	Timers_ListTimers_FullMethodName  = "/v1.Timers/ListTimers"
-	Timers_GetTimer_FullMethodName    = "/v1.Timers/GetTimer"
-	Timers_DeleteTimer_FullMethodName = "/v1.Timers/DeleteTimer"
+	Timers_CreateTimer_FullMethodName  = "/v1.Timers/CreateTimer"
+	Timers_ListTimers_FullMethodName   = "/v1.Timers/ListTimers"
+	Timers_GetTimer_FullMethodName     = "/v1.Timers/GetTimer"
+	Timers_DeleteTimer_FullMethodName  = "/v1.Timers/DeleteTimer"
+	Timers_DeleteTimers_FullMethodName = "/v1.Timers/DeleteTimers"
 )
 
 // TimersClient is the client API for Timers service.
@@ -34,6 +35,7 @@ type TimersClient interface {
 	ListTimers(ctx context.Context, in *ListTimersArgs, opts ...grpc.CallOption) (*ListTimersResponse, error)
 	GetTimer(ctx context.Context, in *GetTimerArgs, opts ...grpc.CallOption) (*Timer, error)
 	DeleteTimer(ctx context.Context, in *DeleteTimerArgs, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteTimers(ctx context.Context, in *DeleteTimersArgs, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type timersClient struct {
@@ -84,6 +86,16 @@ func (c *timersClient) DeleteTimer(ctx context.Context, in *DeleteTimerArgs, opt
 	return out, nil
 }
 
+func (c *timersClient) DeleteTimers(ctx context.Context, in *DeleteTimersArgs, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Timers_DeleteTimers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TimersServer is the server API for Timers service.
 // All implementations must embed UnimplementedTimersServer
 // for forward compatibility.
@@ -92,6 +104,7 @@ type TimersServer interface {
 	ListTimers(context.Context, *ListTimersArgs) (*ListTimersResponse, error)
 	GetTimer(context.Context, *GetTimerArgs) (*Timer, error)
 	DeleteTimer(context.Context, *DeleteTimerArgs) (*emptypb.Empty, error)
+	DeleteTimers(context.Context, *DeleteTimersArgs) (*emptypb.Empty, error)
 	mustEmbedUnimplementedTimersServer()
 }
 
@@ -113,6 +126,9 @@ func (UnimplementedTimersServer) GetTimer(context.Context, *GetTimerArgs) (*Time
 }
 func (UnimplementedTimersServer) DeleteTimer(context.Context, *DeleteTimerArgs) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteTimer not implemented")
+}
+func (UnimplementedTimersServer) DeleteTimers(context.Context, *DeleteTimersArgs) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteTimers not implemented")
 }
 func (UnimplementedTimersServer) mustEmbedUnimplementedTimersServer() {}
 func (UnimplementedTimersServer) testEmbeddedByValue()                {}
@@ -207,6 +223,24 @@ func _Timers_DeleteTimer_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Timers_DeleteTimers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTimersArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TimersServer).DeleteTimers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Timers_DeleteTimers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TimersServer).DeleteTimers(ctx, req.(*DeleteTimersArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Timers_ServiceDesc is the grpc.ServiceDesc for Timers service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -229,6 +263,112 @@ var Timers_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteTimer",
 			Handler:    _Timers_DeleteTimer_Handler,
+		},
+		{
+			MethodName: "DeleteTimers",
+			Handler:    _Timers_DeleteTimers_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/v1/service.proto",
+}
+
+const (
+	Workers_ListWorkers_FullMethodName = "/v1.Workers/ListWorkers"
+)
+
+// WorkersClient is the client API for Workers service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type WorkersClient interface {
+	ListWorkers(ctx context.Context, in *ListWorkersArgs, opts ...grpc.CallOption) (*ListWorkersResponse, error)
+}
+
+type workersClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWorkersClient(cc grpc.ClientConnInterface) WorkersClient {
+	return &workersClient{cc}
+}
+
+func (c *workersClient) ListWorkers(ctx context.Context, in *ListWorkersArgs, opts ...grpc.CallOption) (*ListWorkersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWorkersResponse)
+	err := c.cc.Invoke(ctx, Workers_ListWorkers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WorkersServer is the server API for Workers service.
+// All implementations must embed UnimplementedWorkersServer
+// for forward compatibility.
+type WorkersServer interface {
+	ListWorkers(context.Context, *ListWorkersArgs) (*ListWorkersResponse, error)
+	mustEmbedUnimplementedWorkersServer()
+}
+
+// UnimplementedWorkersServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedWorkersServer struct{}
+
+func (UnimplementedWorkersServer) ListWorkers(context.Context, *ListWorkersArgs) (*ListWorkersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListWorkers not implemented")
+}
+func (UnimplementedWorkersServer) mustEmbedUnimplementedWorkersServer() {}
+func (UnimplementedWorkersServer) testEmbeddedByValue()                 {}
+
+// UnsafeWorkersServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WorkersServer will
+// result in compilation errors.
+type UnsafeWorkersServer interface {
+	mustEmbedUnimplementedWorkersServer()
+}
+
+func RegisterWorkersServer(s grpc.ServiceRegistrar, srv WorkersServer) {
+	// If the following call pancis, it indicates UnimplementedWorkersServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&Workers_ServiceDesc, srv)
+}
+
+func _Workers_ListWorkers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkersArgs)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkersServer).ListWorkers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Workers_ListWorkers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkersServer).ListWorkers(ctx, req.(*ListWorkersArgs))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Workers_ServiceDesc is the grpc.ServiceDesc for Workers service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var Workers_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "v1.Workers",
+	HandlerType: (*WorkersServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListWorkers",
+			Handler:    _Workers_ListWorkers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

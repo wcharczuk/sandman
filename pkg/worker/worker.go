@@ -114,7 +114,7 @@ func (w *Worker) parallelismOrDefault() int {
 }
 
 func (w *Worker) processTick(ctx context.Context) {
-	timers, err := w.mgr.GetDueTimers(ctx, w.shardID, w.identity)
+	timers, err := w.mgr.GetDueTimers(ctx, w.identity)
 	if err != nil {
 		log.GetLogger(ctx).Error("worker; failed to get timers", log.Any("err", err))
 		return
@@ -150,13 +150,13 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 		if remoteErr != nil {
 			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
 			deliveredStatus, deliveredErr := w.formatDeliveredStatus(remoteErr)
-			internalErr = w.mgr.MarkAttempted(ctx, t.ShardID, t.ID, deliveredStatus, deliveredErr)
+			internalErr = w.mgr.MarkAttempted(ctx, t.ID, deliveredStatus, deliveredErr)
 			if internalErr != nil {
 				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark attempted: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
 			}
 			return nil
 		}
-		internalErr = w.mgr.MarkDelivered(ctx, t.ShardID, t.ID)
+		internalErr = w.mgr.MarkDelivered(ctx, t.ID)
 		if internalErr != nil {
 			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark delivered: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
 		}
@@ -166,10 +166,11 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 
 func (w *Worker) logAttrs(t *model.Timer, extra ...any) []any {
 	return append([]any{
-		log.String("shard_id", fmt.Sprint(t.ShardID)),
 		log.String("id", t.ID.String()),
+		log.String("name", t.Name),
 		log.String("addr", t.RPCAddr),
-		log.String("authoirty", t.RPCAuthority),
+		log.String("authority", t.RPCAuthority),
+		log.String("method", t.RPCMethod),
 	}, extra...)
 }
 

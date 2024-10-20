@@ -9,25 +9,43 @@ import (
 
 var _ db.TableNameProvider = (*Timer)(nil)
 
+var timerTypeMeta = db.TypeMetaFor(Timer{})
+var timerTableName = db.TableName(Timer{})
+var timerColumns = timerTypeMeta.Columns()
+
 // Timer is a promise in the future to deliver an RPC
 type Timer struct {
-	ID              uuid.UUID         `yaml:"-" db:"id,pk,auto"`
-	ShardID         uint32            `yaml:"-" db:"shard_id"`
-	Name            string            `yaml:"name" db:"name"`
-	Labels          map[string]string `yaml:"labels" db:"labels,json"`
-	CreatedUTC      time.Time         `yaml:"-" db:"created_utc"`
-	DueUTC          time.Time         `yaml:"due_utc" db:"due_utc"`
-	Attempt         uint64            `yaml:"-" db:"attempt"`
-	AssignableUTC   *time.Time        `yaml:"-" db:"assignable_utc"`
-	AssignedWorker  *string           `yaml:"-" db:"assigned_worker"`
-	RPCAddr         string            `yaml:"rpc_addr" db:"rpc_addr"`
-	RPCAuthority    string            `yaml:"rpc_authority" db:"rpc_authority"`
-	RPCMethod       string            `yaml:"rpc_method" db:"rpc_method"`
-	RPCMeta         map[string]string `yaml:"rpc_meta" db:"rpc_meta,json"`
-	RPCArgs         []byte            `yaml:"rpc_args" db:"rpc_args"`
-	DeliveredUTC    *time.Time        `yaml:"-" db:"delivered_utc"`
-	DeliveredStatus uint32            `yaml:"-" db:"delivered_status"`
-	DeliveredErr    string            `yaml:"-" db:"delivered_err"`
+	ID              uuid.UUID         `db:"id,pk,auto"`
+	Name            string            `db:"name"`
+	Labels          map[string]string `db:"labels,json"`
+	CreatedUTC      time.Time         `db:"created_utc"`
+	DueUTC          time.Time         `db:"due_utc"`
+	Attempt         uint64            `db:"attempt"`
+	AssignableUTC   *time.Time        `db:"assignable_utc"`
+	AssignedWorker  *string           `db:"assigned_worker"`
+	RPCAddr         string            `db:"rpc_addr"`
+	RPCAuthority    string            `db:"rpc_authority"`
+	RPCMethod       string            `db:"rpc_method"`
+	RPCMeta         map[string]string `db:"rpc_meta,json"`
+	RPCArgs         []byte            `db:"rpc_args"`
+	DeliveredUTC    *time.Time        `db:"delivered_utc"`
+	DeliveredStatus uint32            `db:"delivered_status"`
+	DeliveredErr    string            `db:"delivered_err"`
+}
+
+func (t Timer) MatchLabels() map[string]string {
+	output := make(map[string]string, len(t.Labels))
+	for key, value := range t.Labels {
+		output[key] = value
+	}
+	if t.AssignedWorker != nil {
+		output["assigned"] = "true"
+		output["assigned_worker"] = *t.AssignedWorker
+	}
+	if t.DeliveredUTC != nil && !t.DeliveredUTC.IsZero() {
+		output["delivered"] = "true"
+	}
+	return output
 }
 
 // TableName returns the table name.

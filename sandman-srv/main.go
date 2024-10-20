@@ -4,14 +4,19 @@ import (
 	"context"
 	"net"
 	"os"
+	"strings"
+
+	"google.golang.org/grpc"
 
 	"go.charczuk.com/sdk/apputil"
 	"go.charczuk.com/sdk/db"
 	"go.charczuk.com/sdk/db/dbutil"
+	"go.charczuk.com/sdk/db/migration"
+	"go.charczuk.com/sdk/log"
 	"go.charczuk.com/sdk/slant"
-	"google.golang.org/grpc"
 
 	"sandman/pkg/config"
+	"sandman/pkg/grpcutil"
 	"sandman/pkg/model"
 	"sandman/pkg/server"
 	v1 "sandman/proto/v1"
@@ -19,10 +24,10 @@ import (
 
 var entrypoint = apputil.DBEntryPoint[config.Config]{
 	Setup: func(ctx context.Context, cfg config.Config) error {
-		return nil
+		return dbutil.CreateDatabaseIfNotExists(ctx, cfg.DB.Database, db.OptLog(log.GetLogger(ctx)))
 	},
 	Migrate: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
-		return nil
+		return model.Migrations(migration.OptLog(log.GetLogger(ctx))).Apply(ctx, dbc)
 	},
 	Start: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
 		slant.Print(os.Stdout, "sandman-srv")
@@ -32,14 +37,29 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		s := grpc.NewServer()
+		logger := log.GetLogger(ctx)
+		s := grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				grpcutil.Recover(),
+				grpcutil.Logged(logger),
+			),
+		)
 		ts := server.TimerServer{Model: modelMgr}
 		v1.RegisterTimersServer(s, ts)
-		l, err := net.Listen("tcp", ":8333")
+
+		bindAddr := cfg.Server.BindAddr
+		var socketListener net.Listener
+		var err error
+		if strings.HasPrefix(bindAddr, "unix://") {
+			socketListener, err = net.Listen("unix", strings.TrimPrefix(bindAddr, "unix://"))
+		} else {
+			socketListener, err = net.Listen("tcp", bindAddr)
+		}
 		if err != nil {
 			return err
 		}
-		return s.Serve(l)
+		logger.Info("listening", log.String("addr", bindAddr))
+		return s.Serve(socketListener)
 	},
 }
 
