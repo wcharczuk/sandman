@@ -112,18 +112,18 @@ var queryGetDueTimers = fmt.Sprintf(`UPDATE
 SET 
 	assigned_worker = $1
 	, attempt = attempt + 1
-	, assignable_utc = current_timestamp + interval '1 minute'
+	, assignable_utc = $2 + interval '1 minute'
 WHERE
-	due_utc < current_timestamp
+	due_utc < $2
 	AND attempt < 5
-	AND (assignable_utc IS NULL OR assignable_utc < current_timestamp)
+	AND (assignable_utc IS NULL OR assignable_utc < $2)
 	AND delivered_utc IS NULL
 RETURNING %s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
-func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
+func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time) (output []Timer, err error) {
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf)
 	if err != nil {
 		return
 	}

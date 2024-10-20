@@ -84,7 +84,7 @@ func (w *Worker) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-tick.C:
-			deadlineCtx, deadlineCancel := context.WithTimeout(ctx, w.tickInterval)
+			deadlineCtx, deadlineCancel := context.WithTimeout(ctx, w.tickIntervalOrDefault())
 			go func() {
 				defer deadlineCancel()
 				w.processTick(deadlineCtx)
@@ -112,7 +112,7 @@ func (w *Worker) parallelismOrDefault() int {
 }
 
 func (w *Worker) processTick(ctx context.Context) {
-	timers, err := w.mgr.GetDueTimers(ctx, w.identity)
+	timers, err := w.mgr.GetDueTimers(ctx, w.identity, time.Now().UTC())
 	if err != nil {
 		log.GetLogger(ctx).Error("worker; failed to get timers", log.Any("err", err))
 		return
