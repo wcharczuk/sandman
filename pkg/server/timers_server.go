@@ -40,15 +40,17 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 		return nil, status.Error(codes.InvalidArgument, "invalid `rpc_method`; must be have '/' prefix")
 	}
 	newTimer := model.Timer{
-		Name:         t.GetName(),
-		Labels:       t.GetLabels(),
-		CreatedUTC:   time.Now().UTC(),
-		DueUTC:       t.GetDueUtc().AsTime(),
-		RPCAddr:      t.GetRpcAddr(),
-		RPCAuthority: t.GetRpcAuthority(),
-		RPCMethod:    t.GetRpcMethod(),
-		RPCMeta:      t.GetRpcMeta(),
-		RPCArgs:      t.GetRpcArgs(),
+		Name:             t.GetName(),
+		Labels:           t.GetLabels(),
+		CreatedUTC:       time.Now().UTC(),
+		DueUTC:           t.GetDueUtc().AsTime(),
+		RPCAddr:          t.GetRpcAddr(),
+		RPCAuthority:     t.GetRpcAuthority(),
+		RPCMethod:        t.GetRpcMethod(),
+		RPCMeta:          t.GetRpcMeta(),
+		RPCArgsTypeURL:   t.GetRpcArgsTypeUrl(),
+		RPCArgsData:      t.GetRpcArgsData(),
+		RPCReturnTypeURL: t.GetRpcReturnTypeUrl(),
 	}
 	if err := s.Model.Invoke(ctx).Create(&newTimer); err != nil {
 		err = status.Error(codes.Internal, err.Error())
@@ -157,19 +159,21 @@ func (s TimerServer) getTimerByNameOrID(ctx context.Context, id, name string) (*
 
 func (s TimerServer) protoTimerFromModel(t model.Timer) *sandmanv1.Timer {
 	output := &sandmanv1.Timer{
-		Id:              t.ID.ShortString(),
-		Name:            t.Name,
-		Labels:          t.Labels,
-		CreatedUtc:      timestamppb.New(t.CreatedUTC),
-		DueUtc:          timestamppb.New(t.DueUTC),
-		Attempt:         uint32(t.Attempt),
-		RpcAddr:         t.RPCAddr,
-		RpcAuthority:    t.RPCAuthority,
-		RpcMethod:       t.RPCMethod,
-		RpcMeta:         t.RPCMeta,
-		RpcArgs:         t.RPCArgs,
-		DeliveredStatus: t.DeliveredStatus,
-		DeliveredErr:    t.DeliveredErr,
+		Id:               t.ID.ShortString(),
+		Name:             t.Name,
+		Labels:           t.Labels,
+		CreatedUtc:       timestamppb.New(t.CreatedUTC),
+		DueUtc:           timestamppb.New(t.DueUTC),
+		Attempt:          uint32(t.Attempt),
+		RpcAddr:          t.RPCAddr,
+		RpcAuthority:     t.RPCAuthority,
+		RpcMethod:        t.RPCMethod,
+		RpcMeta:          t.RPCMeta,
+		RpcArgsTypeUrl:   t.RPCArgsTypeURL,
+		RpcArgsData:      t.RPCArgsData,
+		RpcReturnTypeUrl: t.RPCReturnTypeURL,
+		DeliveredStatus:  t.DeliveredStatus,
+		DeliveredErr:     t.DeliveredErr,
 	}
 	if t.AssignableUTC != nil && !t.AssignableUTC.IsZero() {
 		output.AssignableUtc = timestamppb.New(*t.AssignableUTC)

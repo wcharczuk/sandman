@@ -17,23 +17,27 @@ type Timer struct {
 }
 
 func (t Timer) ToProto() *v1.Timer {
-	args, _ := base64.StdEncoding.DecodeString(t.RPC.Args)
+	argsData, _ := base64.StdEncoding.DecodeString(t.RPC.ArgsData)
 	return &v1.Timer{
-		Name:         t.Name,
-		Labels:       t.Labels,
-		DueUtc:       timestamppb.New(t.DueUTC),
-		RpcAddr:      t.RPC.Addr,
-		RpcAuthority: t.RPC.Authority,
-		RpcMethod:    t.RPC.Method,
-		RpcMeta:      t.RPC.Meta,
-		RpcArgs:      args,
+		Name:             t.Name,
+		Labels:           t.Labels,
+		DueUtc:           timestamppb.New(t.DueUTC),
+		RpcAddr:          t.RPC.Addr,
+		RpcAuthority:     t.RPC.Authority,
+		RpcMethod:        t.RPC.Method,
+		RpcMeta:          t.RPC.Meta,
+		RpcArgsTypeUrl:   t.RPC.ArgsTypeURL,
+		RpcArgsData:      argsData,
+		RpcReturnTypeUrl: t.RPC.ReturnTypeURL,
 	}
 }
 
 type RPC struct {
-	Addr      string            `yaml:"addr"`
-	Authority string            `yaml:"authority,omitempty"`
-	Method    string            `yaml:"method"`
-	Meta      map[string]string `yaml:"meta,omitempty"`
-	Args      string            `yaml:"args,omitempty"`
+	Addr          string            `yaml:"addr"`
+	Authority     string            `yaml:"authority,omitempty"`
+	Method        string            `yaml:"method"`
+	Meta          map[string]string `yaml:"meta,omitempty"`
+	ArgsTypeURL   string            `yaml:"argsTypeURL,omitempty"`
+	ArgsData      string            `yaml:"argsData,omitempty"`
+	ReturnTypeURL string            `yaml:"returnTypeURL,omitempty"`
 }

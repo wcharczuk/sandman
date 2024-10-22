@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -64,15 +65,38 @@ func timerGenerate() *cli.Command {
 				Name:     "rpc-method",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "rpc-args-type-url",
+				Value:    "google.protobuf.Empty",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "rpc-args-data",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "rpc-return-type-url",
+				Value:    "google.protobuf.Empty",
+				Required: true,
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			rawArgsData, err := cliutil.FileOrStdin(cmd.String("rpc-args-data"))
+			if err != nil {
+				return fmt.Errorf("cannot read args data; %w", err)
+			}
+
+			argsData := base64.StdEncoding.EncodeToString(rawArgsData)
 			t := viewmodel.Timer{
 				Name:   cmd.String("name"),
 				Labels: cmd.StringMap("label"),
 				RPC: viewmodel.RPC{
-					Addr:      cmd.String("rpc-address"),
-					Authority: cmd.String("rpc-authority"),
-					Method:    cmd.String("rpc-method"),
+					Addr:          cmd.String("rpc-address"),
+					Authority:     cmd.String("rpc-authority"),
+					Method:        cmd.String("rpc-method"),
+					ArgsTypeURL:   cmd.String("rcp-args-type-url"),
+					ArgsData:      argsData,
+					ReturnTypeURL: cmd.String("rcp-return-type-url"),
 				},
 			}
 			if dueUTC := cmd.Timestamp("due-utc"); !dueUTC.IsZero() {

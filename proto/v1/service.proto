@@ -34,7 +34,9 @@ message Timer {
 	string rpc_authority = 21;
 	string rpc_method = 22;
 	map<string,string> rpc_meta = 23;
-	bytes rpc_args = 24;
+	string rpc_args_type_url = 24;
+	bytes rpc_args_data = 25;
+	string rpc_return_type_url = 26;
 
 	google.protobuf.Timestamp delivered_utc = 30;
 	uint32 delivered_status = 31;

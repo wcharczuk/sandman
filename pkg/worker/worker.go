@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"go.charczuk.com/sdk/async"
 	"go.charczuk.com/sdk/log"
@@ -141,13 +143,24 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 		var c *grpc.ClientConn
 		c, remoteErr = w.clientForAddr(t.RPCAddr, t.RPCAuthority)
 		if remoteErr != nil {
-			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to create client: %w", internalErr), w.logAttrs(t, log.String("err_type", "remote"))...)
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to create client: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
 			return nil
 		}
 		ctx = metadata.NewOutgoingContext(ctx, w.metadata(t))
 
-		res := []byte{}
-		remoteErr = c.Invoke(ctx, t.RPCMethod, t.RPCArgs, &res, grpc.ForceCodec(new(rawCodec)))
+		req, internalErr := w.getArgs(t.RPCArgsTypeURL, t.RPCArgsData)
+		if internalErr != nil {
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to create rpc args: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
+			return nil
+		}
+
+		res, internalErr := w.getReturn(t.RPCReturnTypeURL)
+		if internalErr != nil {
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to create rpc return: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
+			return nil
+		}
+
+		remoteErr = c.Invoke(ctx, t.RPCMethod, req, &res, grpc.ForceCodec(new(rawCodec)))
 		if remoteErr != nil {
 			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
 			deliveredStatus, deliveredErr := w.formatDeliveredStatus(remoteErr)
@@ -165,6 +178,31 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 		log.GetLogger(ctx).Info("worker; delivery success", w.logAttrs(t)...)
 		return nil
 	}
+}
+
+func (w *Worker) getArgs(typeURL string, data []byte) (dst proto.Message, err error) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByURL(typeURL)
+	if err != nil {
+		if err == protoregistry.NotFound {
+			return nil, err
+		}
+		return nil, fmt.Errorf("could not resolve %q: %v", typeURL, err)
+	}
+	dst = mt.New().Interface()
+	err = proto.Unmarshal(data, dst)
+	return
+}
+
+func (w *Worker) getReturn(typeURL string) (dst proto.Message, err error) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByURL(typeURL)
+	if err != nil {
+		if err == protoregistry.NotFound {
+			return nil, err
+		}
+		return nil, fmt.Errorf("could not resolve %q: %v", typeURL, err)
+	}
+	dst = mt.New().Interface()
+	return
 }
 
 type rawCodec struct {
