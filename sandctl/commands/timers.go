@@ -54,49 +54,37 @@ func timerGenerate() *cli.Command {
 				Aliases: []string{"l"},
 			},
 			&cli.StringFlag{
-				Name:     "rpc-address",
-				Aliases:  []string{"rpc-addr"},
+				Name:     "hook-url",
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name: "rpc-authority",
-			},
-			&cli.StringFlag{
-				Name:     "rpc-method",
+				Name:     "hook-method",
 				Required: true,
 			},
-			&cli.StringFlag{
-				Name:     "rpc-args-type-url",
-				Value:    "google.protobuf.Empty",
-				Required: true,
+			&cli.StringMapFlag{
+				Name: "hook-header",
 			},
 			&cli.StringFlag{
-				Name:     "rpc-args-data",
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:     "rpc-return-type-url",
-				Value:    "google.protobuf.Empty",
+				Name:     "hook-body",
 				Required: true,
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			rawArgsData, err := cliutil.FileOrStdin(cmd.String("rpc-args-data"))
+			rawHookBodyData, err := cliutil.FileOrStdin(cmd.String("hook-body"))
 			if err != nil {
 				return fmt.Errorf("cannot read args data; %w", err)
 			}
 
-			argsData := base64.StdEncoding.EncodeToString(rawArgsData)
+			hookBodyData := base64.StdEncoding.EncodeToString(rawHookBodyData)
+
 			t := viewmodel.Timer{
 				Name:   cmd.String("name"),
 				Labels: cmd.StringMap("label"),
-				RPC: viewmodel.RPC{
-					Addr:          cmd.String("rpc-address"),
-					Authority:     cmd.String("rpc-authority"),
-					Method:        cmd.String("rpc-method"),
-					ArgsTypeURL:   cmd.String("rcp-args-type-url"),
-					ArgsData:      argsData,
-					ReturnTypeURL: cmd.String("rcp-return-type-url"),
+				Hook: viewmodel.Hook{
+					URL:     cmd.String("hook-url"),
+					Method:  cmd.String("hook-method"),
+					Headers: cmd.StringMap("hook-headers"),
+					Body:    hookBodyData,
 				},
 			}
 			if dueUTC := cmd.Timestamp("due-utc"); !dueUTC.IsZero() {

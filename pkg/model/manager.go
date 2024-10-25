@@ -19,6 +19,7 @@ type Manager struct {
 	getDueTimers        *sql.Stmt
 	getTimerByName      *sql.Stmt
 	getTimersDueBetween *sql.Stmt
+	updateTimers        *sql.Stmt
 	cullTimers          *sql.Stmt
 	markDelivered       *sql.Stmt
 	markAttempted       *sql.Stmt
@@ -36,6 +37,10 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		return
 	}
 	m.getTimersDueBetween, err = m.Invoke(ctx).Prepare(queryGetTimersDueBetween)
+	if err != nil {
+		return
+	}
+	m.updateTimers, err = m.Invoke(ctx).Prepare(execUpdateTimers)
 	if err != nil {
 		return
 	}
@@ -115,18 +120,19 @@ var queryGetDueTimers = fmt.Sprintf(`UPDATE
 SET 
 	assigned_worker = $1
 	, attempt = attempt + 1
-	, assignable_utc = $2 + interval '1 minute'
+	, retry_counter = 5
 WHERE
-	due_utc < $2
+	due_counter = 0
+	AND attempt_counter = 0
+	AND retry_counter = 0
 	AND attempt < 5
-	AND (assignable_utc IS NULL OR assignable_utc < $2)
 	AND delivered_utc IS NULL
 RETURNING %s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
-func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time) (output []Timer, err error) {
+func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity)
 	if err != nil {
 		return
 	}
@@ -138,6 +144,21 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf t
 		output = append(output, t)
 	}
 	return
+}
+
+var execUpdateTimers = fmt.Sprintf(`UPDATE %s
+SET
+	due_counter = case when due_counter > 0 then due_counter - 1 else 0 end
+	, attempt_counter = case when attempt_counter > 0 then attempt_counter - 1 else 0 end
+	, retry_counter = case when retry_counter > 0 then retry_counter - 1 else 0 end
+WHERE 
+	delivered_utc IS NOT NULL
+	OR attempt >= 5
+`, timerTableName)
+
+func (m Manager) UpdateTimers(ctx context.Context, asOf time.Time) (err error) {
+	_, err = m.updateTimers.ExecContext(ctx, asOf)
+	return nil
 }
 
 var execCullTimers = fmt.Sprintf(`DELETE FROM %s 
@@ -154,7 +175,6 @@ func (m Manager) CullTimers(ctx context.Context) (err error) {
 var execMarkDelivered = fmt.Sprintf(`UPDATE %s 
 SET 
 	delivered_utc = current_timestamp
-	, assignable_utc = NULL
 WHERE 
 	id = $1
 `, timerTableName)
@@ -166,15 +186,21 @@ func (m Manager) MarkDelivered(ctx context.Context, id uuid.UUID) (err error) {
 
 var execMarkAttempted = fmt.Sprintf(`UPDATE %s 
 SET 
-	delivered_status = $2
+	delivered_status_code = $2
 	, delivered_err = $3
-	, assignable_utc = NULL
+	, retry_counter = 5
+	, attempt_counter = 0
 WHERE 
 	id = $1
+	AND attempt < 5
 `, timerTableName)
 
-func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatus uint32, deliveredErr string) (err error) {
-	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErr)
+func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatus uint32, deliveredErr error) (err error) {
+	var deliveredErrString string
+	if deliveredErr != nil {
+		deliveredErrString = deliveredErr.Error()
+	}
+	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErrString)
 	return
 }
 

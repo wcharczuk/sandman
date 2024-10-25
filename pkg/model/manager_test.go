@@ -37,8 +37,6 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
-		RPCAddr:    "127.0.0.1:5555",
-		RPCMethod:  "/basic.v1/Foo",
 	})
 	assert.ItsNil(t, err)
 	err = modelMgr.Invoke(ctx).Create(&Timer{
@@ -50,8 +48,6 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
-		RPCAddr:    "127.0.0.1:5555",
-		RPCMethod:  "/basic.v1/Foo",
 	})
 	assert.ItsNil(t, err)
 
@@ -64,12 +60,10 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
-		RPCAddr:    "127.0.0.1:5555",
-		RPCMethod:  "/basic.v1/Foo",
 	})
 	assert.ItsNil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker")
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 2, len(timers))
 }

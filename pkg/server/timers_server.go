@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,27 +32,28 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	if t.GetName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "invalid `name`; must be set")
 	}
-	if t.GetRpcAddr() == "" {
-		return nil, status.Error(codes.InvalidArgument, "invalid `rpc_addr`; must be set")
+	if t.GetHookUrl() == "" {
+		return nil, status.Error(codes.InvalidArgument, "invalid `hook_url`; must be set")
 	}
-	if t.GetRpcMethod() == "" {
-		return nil, status.Error(codes.InvalidArgument, "invalid `rpc_method`; must be set")
+	if _, err := url.Parse(t.GetHookUrl()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid `hook_url`; could not parse url")
 	}
-	if !strings.HasPrefix(t.GetRpcMethod(), "/") {
-		return nil, status.Error(codes.InvalidArgument, "invalid `rpc_method`; must be have '/' prefix")
+	if strings.ToLower(t.GetHookMethod()) == http.MethodGet && len(t.GetHookBody()) > 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid hook; `hook_method` cannot be GET with a body specified")
 	}
+	now := time.Now().UTC()
+	dueUTC := t.GetDueUtc().AsTime()
+
 	newTimer := model.Timer{
-		Name:             t.GetName(),
-		Labels:           t.GetLabels(),
-		CreatedUTC:       time.Now().UTC(),
-		DueUTC:           t.GetDueUtc().AsTime(),
-		RPCAddr:          t.GetRpcAddr(),
-		RPCAuthority:     t.GetRpcAuthority(),
-		RPCMethod:        t.GetRpcMethod(),
-		RPCMeta:          t.GetRpcMeta(),
-		RPCArgsTypeURL:   t.GetRpcArgsTypeUrl(),
-		RPCArgsData:      t.GetRpcArgsData(),
-		RPCReturnTypeURL: t.GetRpcReturnTypeUrl(),
+		Name:        t.GetName(),
+		Labels:      t.GetLabels(),
+		CreatedUTC:  now,
+		DueUTC:      dueUTC,
+		DueCounter:  minutesUntil(now, dueUTC),
+		HookURL:     t.GetHookUrl(),
+		HookMethod:  t.GetHookMethod(),
+		HookHeaders: t.GetHookHeaders(),
+		HookBody:    t.GetHookBody(),
 	}
 	if err := s.Model.Invoke(ctx).Create(&newTimer); err != nil {
 		err = status.Error(codes.Internal, err.Error())
@@ -59,6 +62,14 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	return &sandmanv1.IdentifierResponse{
 		Id: newTimer.ID.String(),
 	}, nil
+}
+
+func minutesUntil(now, dueUTC time.Time) uint64 {
+	diff := dueUTC.Sub(now)
+	if diff <= 0 {
+		return 0
+	}
+	return uint64(diff / time.Minute)
 }
 
 func (s TimerServer) ListTimers(ctx context.Context, args *sandmanv1.ListTimersArgs) (*sandmanv1.ListTimersResponse, error) {
@@ -159,24 +170,20 @@ func (s TimerServer) getTimerByNameOrID(ctx context.Context, id, name string) (*
 
 func (s TimerServer) protoTimerFromModel(t model.Timer) *sandmanv1.Timer {
 	output := &sandmanv1.Timer{
-		Id:               t.ID.ShortString(),
-		Name:             t.Name,
-		Labels:           t.Labels,
-		CreatedUtc:       timestamppb.New(t.CreatedUTC),
-		DueUtc:           timestamppb.New(t.DueUTC),
-		Attempt:          uint32(t.Attempt),
-		RpcAddr:          t.RPCAddr,
-		RpcAuthority:     t.RPCAuthority,
-		RpcMethod:        t.RPCMethod,
-		RpcMeta:          t.RPCMeta,
-		RpcArgsTypeUrl:   t.RPCArgsTypeURL,
-		RpcArgsData:      t.RPCArgsData,
-		RpcReturnTypeUrl: t.RPCReturnTypeURL,
-		DeliveredStatus:  t.DeliveredStatus,
-		DeliveredErr:     t.DeliveredErr,
-	}
-	if t.AssignableUTC != nil && !t.AssignableUTC.IsZero() {
-		output.AssignableUtc = timestamppb.New(*t.AssignableUTC)
+		Id:                  t.ID.ShortString(),
+		Name:                t.Name,
+		Labels:              t.Labels,
+		CreatedUtc:          timestamppb.New(t.CreatedUTC),
+		DueUtc:              timestamppb.New(t.DueUTC),
+		DueCounter:          t.DueCounter,
+		RetryCounter:        t.RetryCounter,
+		Attempt:             uint32(t.Attempt),
+		HookUrl:             t.HookURL,
+		HookMethod:          t.HookMethod,
+		HookHeaders:         t.HookHeaders,
+		HookBody:            t.HookBody,
+		DeliveredStatusCode: t.DeliveredStatusCode,
+		DeliveredErr:        t.DeliveredErr,
 	}
 	if t.AssignedWorker != nil && *t.AssignedWorker != "" {
 		output.AssignedWorker = *t.AssignedWorker

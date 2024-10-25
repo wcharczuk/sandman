@@ -26,20 +26,19 @@ message Timer {
 	google.protobuf.Timestamp created_utc = 4;
 	google.protobuf.Timestamp due_utc = 5;
 
-	uint32 attempt = 10;
-	google.protobuf.Timestamp assignable_utc = 11;
-	string assigned_worker = 12;
+	uint64 due_counter = 10;
+	uint32 retry_counter = 12;
+	uint32 attempt_counter = 13;
+	uint32 attempt = 14;
+	string assigned_worker = 15;
 
-	string rpc_addr = 20;
-	string rpc_authority = 21;
-	string rpc_method = 22;
-	map<string,string> rpc_meta = 23;
-	string rpc_args_type_url = 24;
-	bytes rpc_args_data = 25;
-	string rpc_return_type_url = 26;
+	string hook_url = 20;
+	string hook_method = 21;
+	map<string,string> hook_headers = 22;
+	bytes hook_body = 25;
 
 	google.protobuf.Timestamp delivered_utc = 30;
-	uint32 delivered_status = 31;
+	uint32 delivered_status_code = 31;
 	string delivered_err = 32;
 }
 

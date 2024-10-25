@@ -13,31 +13,25 @@ type Timer struct {
 	Name   string            `yaml:"name"`
 	Labels map[string]string `yaml:"labels,omitempty"`
 	DueUTC time.Time         `yaml:"due_utc"`
-	RPC    RPC               `yaml:"rpc"`
+	Hook   Hook              `yaml:"hook"`
 }
 
 func (t Timer) ToProto() *v1.Timer {
-	argsData, _ := base64.StdEncoding.DecodeString(t.RPC.ArgsData)
+	bodyData, _ := base64.StdEncoding.DecodeString(t.Hook.Body)
 	return &v1.Timer{
-		Name:             t.Name,
-		Labels:           t.Labels,
-		DueUtc:           timestamppb.New(t.DueUTC),
-		RpcAddr:          t.RPC.Addr,
-		RpcAuthority:     t.RPC.Authority,
-		RpcMethod:        t.RPC.Method,
-		RpcMeta:          t.RPC.Meta,
-		RpcArgsTypeUrl:   t.RPC.ArgsTypeURL,
-		RpcArgsData:      argsData,
-		RpcReturnTypeUrl: t.RPC.ReturnTypeURL,
+		Name:        t.Name,
+		Labels:      t.Labels,
+		DueUtc:      timestamppb.New(t.DueUTC),
+		HookUrl:     t.Hook.URL,
+		HookMethod:  t.Hook.Method,
+		HookHeaders: t.Hook.Headers,
+		HookBody:    bodyData,
 	}
 }
 
-type RPC struct {
-	Addr          string            `yaml:"addr"`
-	Authority     string            `yaml:"authority,omitempty"`
-	Method        string            `yaml:"method"`
-	Meta          map[string]string `yaml:"meta,omitempty"`
-	ArgsTypeURL   string            `yaml:"argsTypeURL,omitempty"`
-	ArgsData      string            `yaml:"argsData,omitempty"`
-	ReturnTypeURL string            `yaml:"returnTypeURL,omitempty"`
+type Hook struct {
+	URL     string            `yaml:"url"`
+	Method  string            `yaml:"method,omitempty"`
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Body    string            `yaml:"body,omitempty"`
 }

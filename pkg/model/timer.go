@@ -15,24 +15,27 @@ var timerColumns = timerTypeMeta.Columns()
 
 // Timer is a promise in the future to deliver an RPC
 type Timer struct {
-	ID               uuid.UUID         `db:"id,pk,auto"`
-	Name             string            `db:"name"`
-	Labels           map[string]string `db:"labels,json"`
-	CreatedUTC       time.Time         `db:"created_utc"`
-	DueUTC           time.Time         `db:"due_utc"`
-	Attempt          uint64            `db:"attempt"`
-	AssignableUTC    *time.Time        `db:"assignable_utc"`
-	AssignedWorker   *string           `db:"assigned_worker"`
-	RPCAddr          string            `db:"rpc_addr"`
-	RPCAuthority     string            `db:"rpc_authority"`
-	RPCMethod        string            `db:"rpc_method"`
-	RPCMeta          map[string]string `db:"rpc_meta,json"`
-	RPCArgsTypeURL   string            `db:"rpc_args_type_url"`
-	RPCArgsData      []byte            `db:"rpc_args_data"`
-	RPCReturnTypeURL string            `db:"rpc_return_type_url"`
-	DeliveredUTC     *time.Time        `db:"delivered_utc"`
-	DeliveredStatus  uint32            `db:"delivered_status"`
-	DeliveredErr     string            `db:"delivered_err"`
+	ID     uuid.UUID         `db:"id,pk,auto"`
+	Name   string            `db:"name"`
+	Labels map[string]string `db:"labels,json"`
+
+	CreatedUTC time.Time `db:"created_utc"`
+	DueUTC     time.Time `db:"due_utc"`
+
+	DueCounter     uint64  `db:"due_counter"`
+	RetryCounter   uint32  `db:"retry_counter"`
+	AttemptCounter uint32  `db:"attempt_counter"`
+	Attempt        uint32  `db:"attempt"`
+	AssignedWorker *string `db:"assigned_worker"`
+
+	HookURL     string            `db:"hook_url"`
+	HookMethod  string            `db:"hook_method"`
+	HookHeaders map[string]string `db:"hook_headers,json"`
+	HookBody    []byte            `db:"hook_body"`
+
+	DeliveredUTC        *time.Time `db:"delivered_utc"`
+	DeliveredStatusCode uint32     `db:"delivered_status_code"`
+	DeliveredErr        string     `db:"delivered_err"`
 }
 
 func (t Timer) MatchLabels() map[string]string {
