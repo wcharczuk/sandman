@@ -55,6 +55,26 @@ func (s *Scheduler) tickIntervalOrDefault() time.Duration {
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
+	lastRun, err := s.mgr.GetLastRun(ctx)
+	if err != nil {
+		return err
+	}
+	if lastRun.IsZero() {
+		now := time.Now().UTC().Add(time.Minute)
+		delta := time.Duration(now.Nanosecond()) + (time.Duration(now.Second()) * time.Second)
+		log.GetLogger(ctx).Info("scheduler sleeping", log.Duration("for", delta))
+		s.sleepFor(ctx, time.Duration(delta))
+	} else if delta := time.Now().UTC().Sub(lastRun.UTC()); delta < time.Minute {
+		log.GetLogger(ctx).Info("scheduler sleeping", log.Duration("for", delta))
+		s.sleepFor(ctx, delta)
+	}
+
+	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.tickIntervalOrDefault())
+	go func() {
+		defer deadlineCancel()
+		s.processTick(deadlineCtx)
+	}()
+
 	tick := time.NewTicker(s.tickIntervalOrDefault())
 	defer tick.Stop()
 	for {
@@ -62,7 +82,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-tick.C:
-			deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.tickIntervalOrDefault())
+			deadlineCtx, deadlineCancel = context.WithTimeout(ctx, s.tickIntervalOrDefault())
 			go func() {
 				defer deadlineCancel()
 				s.processTick(deadlineCtx)
@@ -70,12 +90,22 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		}
 	}
 }
+func (w *Scheduler) sleepFor(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-t.C:
+		return
+	}
+}
 
 func (w *Scheduler) processTick(ctx context.Context) {
 	started := time.Now()
 	defer func() {
 		elapsed := time.Since(started)
-		log.GetLogger(ctx).Error("scheduler; updated timers", log.Duration("elapsed", elapsed))
+		log.GetLogger(ctx).Info("scheduler; updated timers", log.Duration("elapsed", elapsed))
 		w.schedulerElapsedLastMillis.Set(int64(elapsed / time.Millisecond))
 	}()
 	w.schedulerTicks.Add(1)

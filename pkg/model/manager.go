@@ -19,6 +19,7 @@ type Manager struct {
 	getDueTimers        *sql.Stmt
 	getTimerByName      *sql.Stmt
 	getTimersDueBetween *sql.Stmt
+	getLastRun          *sql.Stmt
 	updateLastRun       *sql.Stmt
 	updateTimers        *sql.Stmt
 	cullTimers          *sql.Stmt
@@ -31,42 +32,57 @@ type Manager struct {
 func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.getDueTimers, err = m.Invoke(ctx).Prepare(queryGetDueTimers)
 	if err != nil {
+		err = fmt.Errorf("queryGetDueTimers: %w", err)
 		return
 	}
 	m.getTimerByName, err = m.Invoke(ctx).Prepare(queryGetTimerByName)
 	if err != nil {
+		err = fmt.Errorf("getTimerByName: %w", err)
 		return
 	}
 	m.getTimersDueBetween, err = m.Invoke(ctx).Prepare(queryGetTimersDueBetween)
 	if err != nil {
+		err = fmt.Errorf("getTimersDueBetween: %w", err)
+		return
+	}
+	m.getLastRun, err = m.Invoke(ctx).Prepare(queryGetLastRun)
+	if err != nil {
+		err = fmt.Errorf("getLastRun: %w", err)
 		return
 	}
 	m.updateLastRun, err = m.Invoke(ctx).Prepare(execUpdateLastRun)
 	if err != nil {
+		err = fmt.Errorf("updateLastRun: %w", err)
 		return
 	}
 	m.updateTimers, err = m.Invoke(ctx).Prepare(execUpdateTimers)
 	if err != nil {
+		err = fmt.Errorf("updateTimers: %w", err)
 		return
 	}
 	m.cullTimers, err = m.Invoke(ctx).Prepare(execCullTimers)
 	if err != nil {
+		err = fmt.Errorf("cullTimers: %w", err)
 		return
 	}
 	m.markDelivered, err = m.Invoke(ctx).Prepare(execMarkDelivered)
 	if err != nil {
+		err = fmt.Errorf("markDelivered: %w", err)
 		return
 	}
 	m.markAttempted, err = m.Invoke(ctx).Prepare(execMarkAttempted)
 	if err != nil {
+		err = fmt.Errorf("markAttempted: %w", err)
 		return
 	}
 	m.deleteTimerByID, err = m.Invoke(ctx).Prepare(execDeleteTimerByID)
 	if err != nil {
+		err = fmt.Errorf("deleteTimerByID: %w", err)
 		return
 	}
 	m.deleteTimerByName, err = m.Invoke(ctx).Prepare(execDeleteTimerByName)
 	if err != nil {
+		err = fmt.Errorf("deleteTimerByName: %w", err)
 		return
 	}
 	return
@@ -151,13 +167,28 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (outpu
 	return
 }
 
-var execUpdateLastRun = fmt.Sprintf(`UPDATE %s
-SET
-	last_run = $1
-`, schedulerTableName)
+var queryGetLastRun = fmt.Sprintf(`SELECT last_run FROM %s WHERE name = $1`, schedulerTableName)
+
+func (m Manager) GetLastRun(ctx context.Context) (lastRun time.Time, err error) {
+	res, err := m.getLastRun.QueryContext(ctx, "default")
+	if err != nil {
+		err = fmt.Errorf("getLastRun: %w", err)
+		return
+	}
+	if !res.Next() {
+		return
+	}
+	err = res.Scan(&lastRun)
+	return
+}
+
+var execUpdateLastRun = fmt.Sprintf(`INSERT INTO %s (name, last_run) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET last_run = $2`, schedulerTableName)
 
 func (m Manager) UpdateLastRun(ctx context.Context, asOf time.Time) (err error) {
-	_, err = m.updateLastRun.ExecContext(ctx, asOf)
+	_, err = m.updateLastRun.ExecContext(ctx, "default", asOf)
+	if err != nil {
+		err = fmt.Errorf("updateLastRun: %w", err)
+	}
 	return
 }
 

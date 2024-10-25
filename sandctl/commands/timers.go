@@ -58,25 +58,25 @@ func timerGenerate() *cli.Command {
 				Required: true,
 			},
 			&cli.StringFlag{
-				Name:     "hook-method",
-				Required: true,
+				Name:  "hook-method",
+				Value: "POST",
 			},
 			&cli.StringMapFlag{
 				Name: "hook-header",
 			},
 			&cli.StringFlag{
-				Name:     "hook-body",
-				Required: true,
+				Name: "hook-body",
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			rawHookBodyData, err := cliutil.FileOrStdin(cmd.String("hook-body"))
-			if err != nil {
-				return fmt.Errorf("cannot read args data; %w", err)
+			var hookBodyData string
+			if hookBodyPath := cmd.String("hook-body"); hookBodyPath != "" {
+				rawHookBodyData, err := cliutil.FileOrStdin(hookBodyPath)
+				if err != nil {
+					return fmt.Errorf("cannot read args data; %w", err)
+				}
+				hookBodyData = base64.StdEncoding.EncodeToString(rawHookBodyData)
 			}
-
-			hookBodyData := base64.StdEncoding.EncodeToString(rawHookBodyData)
-
 			t := viewmodel.Timer{
 				Name:   cmd.String("name"),
 				Labels: cmd.StringMap("label"),
@@ -88,7 +88,7 @@ func timerGenerate() *cli.Command {
 				},
 			}
 			if dueUTC := cmd.Timestamp("due-utc"); !dueUTC.IsZero() {
-				t.DueUTC = dueUTC
+				t.DueUTC = dueUTC.UTC()
 			} else if dueIn := cmd.Duration("due-in"); dueIn > 0 {
 				t.DueUTC = time.Now().UTC().Add(dueIn)
 			}

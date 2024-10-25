@@ -13,6 +13,7 @@ var schedulerTableName = db.TableName(Scheduler{})
 var schedulerColumns = schedulerTypeMeta.Columns()
 
 type Scheduler struct {
+	Name    string    `db:"name,pk"`
 	LastRun time.Time `db:"last_run"`
 }
 
