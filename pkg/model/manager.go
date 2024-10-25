@@ -19,6 +19,7 @@ type Manager struct {
 	getDueTimers        *sql.Stmt
 	getTimerByName      *sql.Stmt
 	getTimersDueBetween *sql.Stmt
+	updateLastRun       *sql.Stmt
 	updateTimers        *sql.Stmt
 	cullTimers          *sql.Stmt
 	markDelivered       *sql.Stmt
@@ -37,6 +38,10 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		return
 	}
 	m.getTimersDueBetween, err = m.Invoke(ctx).Prepare(queryGetTimersDueBetween)
+	if err != nil {
+		return
+	}
+	m.updateLastRun, err = m.Invoke(ctx).Prepare(execUpdateLastRun)
 	if err != nil {
 		return
 	}
@@ -146,6 +151,16 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (outpu
 	return
 }
 
+var execUpdateLastRun = fmt.Sprintf(`UPDATE %s
+SET
+	last_run = $1
+`, schedulerTableName)
+
+func (m Manager) UpdateLastRun(ctx context.Context, asOf time.Time) (err error) {
+	_, err = m.updateLastRun.ExecContext(ctx, asOf)
+	return
+}
+
 var execUpdateTimers = fmt.Sprintf(`UPDATE %s
 SET
 	due_counter = case when due_counter > 0 then due_counter - 1 else 0 end
@@ -157,8 +172,11 @@ WHERE
 `, timerTableName)
 
 func (m Manager) UpdateTimers(ctx context.Context, asOf time.Time) (err error) {
-	_, err = m.updateTimers.ExecContext(ctx, asOf)
-	return nil
+	_, err = m.updateTimers.ExecContext(ctx)
+	if err == nil {
+		err = m.UpdateLastRun(ctx, asOf)
+	}
+	return
 }
 
 var execCullTimers = fmt.Sprintf(`DELETE FROM %s 
@@ -169,7 +187,7 @@ WHERE
 
 func (m Manager) CullTimers(ctx context.Context) (err error) {
 	_, err = m.cullTimers.ExecContext(ctx)
-	return nil
+	return
 }
 
 var execMarkDelivered = fmt.Sprintf(`UPDATE %s 

@@ -16,6 +16,13 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 					),
 				),
 			),
+			migration.OptGroups(
+				migration.NewGroupWithAction(
+					dbgen.TableFrom(
+						Scheduler{},
+					),
+				),
+			),
 		)...,
 	)
 }
