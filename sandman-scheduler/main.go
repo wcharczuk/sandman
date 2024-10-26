@@ -40,8 +40,7 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		workerID, _ := os.Hostname()
-		s := scheduler.New(workerID, modelMgr)
+		s := scheduler.New(cfg.Hostname, modelMgr)
 		s.Vars().Publish()
 		go func() {
 			if err := http.ListenAndServe(expvarBindAddr(), expvar.Handler()); err != nil {

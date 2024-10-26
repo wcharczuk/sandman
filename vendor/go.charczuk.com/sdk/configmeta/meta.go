@@ -2,6 +2,7 @@ package configmeta
 
 import (
 	"context"
+	"os"
 
 	"go.charczuk.com/sdk/configutil"
 )
@@ -85,7 +86,7 @@ func (m *Meta) Resolve(ctx context.Context) error {
 		configutil.Set(&m.ProjectName, configutil.Env[string](VarProjectName), configutil.Lazy(&m.ProjectName), configutil.Lazy(&ProjectName)),
 		configutil.Set(&m.ClusterName, configutil.Env[string](VarClusterName), configutil.Lazy(&m.ClusterName), configutil.Lazy(&ClusterName)),
 		configutil.Set(&m.ServiceEnv, configutil.Env[string](VarServiceEnv), configutil.Lazy(&m.ServiceEnv)),
-		configutil.Set(&m.Hostname, configutil.Env[string](VarHostname), configutil.Lazy(&m.Hostname)),
+		configutil.Set(&m.Hostname, configutil.Env[string](VarHostname), configutil.Lazy(&m.Hostname), m.ResolveHostname),
 		configutil.Set(&m.Version, configutil.Env[string](VarVersion), configutil.Lazy(&m.Version), configutil.Lazy(&Version), configutil.Const(DefaultVersion)),
 		configutil.Set(&m.GitRef, configutil.Env[string](VarGitRef), configutil.Lazy(&m.GitRef), configutil.Lazy(&GitRef)),
 	)
@@ -95,4 +96,16 @@ func (m *Meta) Resolve(ctx context.Context) error {
 // an environment where we care about secrets leaking.
 func (m Meta) IsProdlike() bool {
 	return m.ServiceEnv != EnvDev && m.ServiceEnv != EnvTest
+}
+
+// ResolveHostname provides a base default as the kernel hostname.
+func (m Meta) ResolveHostname(ctx context.Context) (*string, error) {
+	osHostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+	if osHostname != "" {
+		return &osHostname, nil
+	}
+	return nil, nil
 }

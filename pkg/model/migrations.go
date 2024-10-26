@@ -19,7 +19,15 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 			migration.OptGroups(
 				migration.NewGroupWithAction(
 					dbgen.TableFrom(
-						Scheduler{},
+						SchedulerLeader{},
+						"INSERT INTO scheduler_leader (namespace, generation) VALUES ('default', 0)",
+					),
+				),
+			),
+			migration.OptGroups(
+				migration.NewGroupWithAction(
+					dbgen.TableFrom(
+						SchedulerLastRun{},
 					),
 				),
 			),

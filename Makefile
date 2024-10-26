@@ -18,10 +18,10 @@ test:
 db:
 	@cockroach sql --insecure --execute="drop database if exists sandman"
 	@cockroach sql --insecure --execute="create database sandman"
-	@CONFIG_PATH=$(PREFIX)/_config/worker.yml go run sandman-scheduler/main.go -db-migrate -start=false
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run sandman-scheduler/main.go -db-migrate -start=false
 
 migrate:
-	@CONFIG_PATH=$(PREFIX)/_config/worker.yml go run sandman-scheduler/main.go -db-migrate -start=false
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run sandman-scheduler/main.go -db-migrate -start=false
 
 run:
-	@CONFIG_PATH=$(PREFIX)/_config/server.yml go run dev/main.go
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run dev/main.go

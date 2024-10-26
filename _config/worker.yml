@@ -1,5 +1,0 @@
-db:
-  database: sandman
-  port: 26257
-  username: root
-  sslMode: disable

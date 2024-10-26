@@ -16,32 +16,44 @@ import (
 type Manager struct {
 	dbutil.BaseManager
 
-	attemptLeaderElection *sql.Stmt
-	heartbeat             *sql.Stmt
-	getDueTimers          *sql.Stmt
-	getTimerByName        *sql.Stmt
-	getTimersDueBetween   *sql.Stmt
-	getLastRun            *sql.Stmt
-	updateLastRun         *sql.Stmt
-	updateTimers          *sql.Stmt
-	cullTimers            *sql.Stmt
-	markDelivered         *sql.Stmt
-	markAttempted         *sql.Stmt
-	deleteTimerByID       *sql.Stmt
-	deleteTimerByName     *sql.Stmt
+	schedulerLeaderElection  *sql.Stmt
+	schedulerLeaderHeartbeat *sql.Stmt
+	getSchedulerLastRun      *sql.Stmt
+	updateSchedulerLastRun   *sql.Stmt
+
+	getDueTimers        *sql.Stmt
+	getTimerByName      *sql.Stmt
+	getTimersDueBetween *sql.Stmt
+	updateTimers        *sql.Stmt
+	cullTimers          *sql.Stmt
+	markDelivered       *sql.Stmt
+	markAttempted       *sql.Stmt
+	deleteTimerByID     *sql.Stmt
+	deleteTimerByName   *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
-	m.attemptLeaderElection, err = m.Invoke(ctx).Prepare(queryAttemptLeaderElection)
+	m.schedulerLeaderElection, err = m.Invoke(ctx).Prepare(querySchedulerLeaderElection)
 	if err != nil {
-		err = fmt.Errorf("attemptLeaderElection: %w", err)
+		err = fmt.Errorf("schedulerLeaderElection: %w", err)
 		return
 	}
-	m.heartbeat, err = m.Invoke(ctx).Prepare(execHeartbeat)
+	m.schedulerLeaderHeartbeat, err = m.Invoke(ctx).Prepare(execSchedulerLeaderHeartbeat)
 	if err != nil {
-		err = fmt.Errorf("heartbeat: %w", err)
+		err = fmt.Errorf("schedulerLeaderHeartbeat: %w", err)
 		return
 	}
+	m.getSchedulerLastRun, err = m.Invoke(ctx).Prepare(queryGetSchedulerLastRun)
+	if err != nil {
+		err = fmt.Errorf("getLastRun: %w", err)
+		return
+	}
+	m.updateSchedulerLastRun, err = m.Invoke(ctx).Prepare(execUpdateSchedulerLastRun)
+	if err != nil {
+		err = fmt.Errorf("updateLastRun: %w", err)
+		return
+	}
+
 	m.getDueTimers, err = m.Invoke(ctx).Prepare(queryGetDueTimers)
 	if err != nil {
 		err = fmt.Errorf("getDueTimers: %w", err)
@@ -55,16 +67,6 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.getTimersDueBetween, err = m.Invoke(ctx).Prepare(queryGetTimersDueBetween)
 	if err != nil {
 		err = fmt.Errorf("getTimersDueBetween: %w", err)
-		return
-	}
-	m.getLastRun, err = m.Invoke(ctx).Prepare(queryGetLastRun)
-	if err != nil {
-		err = fmt.Errorf("getLastRun: %w", err)
-		return
-	}
-	m.updateLastRun, err = m.Invoke(ctx).Prepare(execUpdateLastRun)
-	if err != nil {
-		err = fmt.Errorf("updateLastRun: %w", err)
 		return
 	}
 	m.updateTimers, err = m.Invoke(ctx).Prepare(execUpdateTimers)
@@ -101,10 +103,16 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 }
 
 func (m Manager) Close() error {
-	if err := m.attemptLeaderElection.Close(); err != nil {
+	if err := m.schedulerLeaderElection.Close(); err != nil {
 		return err
 	}
-	if err := m.heartbeat.Close(); err != nil {
+	if err := m.schedulerLeaderHeartbeat.Close(); err != nil {
+		return err
+	}
+	if err := m.getSchedulerLastRun.Close(); err != nil {
+		return err
+	}
+	if err := m.updateSchedulerLastRun.Close(); err != nil {
 		return err
 	}
 	if err := m.cullTimers.Close(); err != nil {
@@ -119,9 +127,6 @@ func (m Manager) Close() error {
 	if err := m.getDueTimers.Close(); err != nil {
 		return err
 	}
-	if err := m.getLastRun.Close(); err != nil {
-		return err
-	}
 	if err := m.getTimerByName.Close(); err != nil {
 		return err
 	}
@@ -132,9 +137,6 @@ func (m Manager) Close() error {
 		return err
 	}
 	if err := m.markDelivered.Close(); err != nil {
-		return err
-	}
-	if err := m.updateLastRun.Close(); err != nil {
 		return err
 	}
 	if err := m.updateTimers.Close(); err != nil {
@@ -188,41 +190,46 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	return
 }
 
-var queryAttemptLeaderElection = fmt.Sprintf(`UPDATE %s
+var querySchedulerLeaderElection = fmt.Sprintf(`UPDATE %s
 SET
 	leader = $2
 	, generation = $3+1
 WHERE
-	name = $1
-	AND (generation = $3 OR current_timestamp - last_seen_utc > interval '1 minute')
-RETURNING generation
-`, schedulerTableName)
+	namespace = $1
+	AND (generation = $3 OR current_timestamp - last_seen_utc >= interval '1 minute')
+RETURNING leader, generation
+`, schedulerLeaderTableName)
 
-func (m Manager) AttemptLeaderElection(ctx context.Context, worker string, generation uint64) (newGeneration uint64, leader bool, err error) {
+func (m Manager) SchedulerLeaderElection(ctx context.Context, namespace string, worker string, generation uint64) (newGeneration uint64, isLeader bool, err error) {
+	fmt.Printf("SchedulerLeaderElection: using namespace=%s worker=%s and generation=%d\n", namespace, worker, generation)
 	var res *sql.Rows
-	res, err = m.attemptLeaderElection.QueryContext(ctx, "default", worker, generation)
+	res, err = m.schedulerLeaderElection.QueryContext(ctx, namespace, worker, generation)
 	if err != nil {
 		return
 	}
 	if !res.Next() {
+		fmt.Printf("SchedulerLeaderElection: no rows returned\n")
 		return
 	}
-	if err = res.Scan(&newGeneration); err != nil {
+	var currentLeader string
+	if err = res.Scan(&currentLeader, &newGeneration); err != nil {
 		return
 	}
-	leader = newGeneration == generation
+	fmt.Printf("SchedulerLeaderElection: %v vs. %v\n", currentLeader, worker)
+	isLeader = worker == currentLeader
 	return
 }
 
-var execHeartbeat = fmt.Sprintf(`UPDATE %s
+var execSchedulerLeaderHeartbeat = fmt.Sprintf(`UPDATE %s
 SET 
 	last_seen_utc = current_timestamp
 WHERE
-	name = $1
-`, schedulerTableName)
+	namespace = $1
+	AND leader = $2
+`, schedulerLeaderTableName)
 
-func (m Manager) Heartbeat(ctx context.Context) (err error) {
-	_, err = m.heartbeat.ExecContext(ctx)
+func (m Manager) SchedulerHeartbeat(ctx context.Context, namespace, worker string) (err error) {
+	_, err = m.schedulerLeaderHeartbeat.ExecContext(ctx, namespace, worker)
 	return
 }
 
@@ -267,12 +274,12 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (outpu
 	return
 }
 
-var queryGetLastRun = fmt.Sprintf(`SELECT last_run FROM %s WHERE name = $1`, schedulerTableName)
+var queryGetSchedulerLastRun = fmt.Sprintf(`SELECT last_run FROM %s WHERE name = $1`, schedulerLastRunTableName)
 
-func (m Manager) GetLastRun(ctx context.Context) (lastRun time.Time, err error) {
-	res, err := m.getLastRun.QueryContext(ctx, "default")
+func (m Manager) GetSchedulerLastRun(ctx context.Context) (lastRun time.Time, err error) {
+	res, err := m.getSchedulerLastRun.QueryContext(ctx, "default")
 	if err != nil {
-		err = fmt.Errorf("getLastRun: %w", err)
+		err = fmt.Errorf("getSchedulerLastRun: %w", err)
 		return
 	}
 	if !res.Next() {
@@ -282,30 +289,45 @@ func (m Manager) GetLastRun(ctx context.Context) (lastRun time.Time, err error) 
 	return
 }
 
-var execUpdateLastRun = fmt.Sprintf(`INSERT INTO %s (name, last_run) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET last_run = $2`, schedulerTableName)
+var execUpdateSchedulerLastRun = fmt.Sprintf(`INSERT INTO %s (name, last_run) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET last_run = $2`, schedulerLastRunTableName)
 
-func (m Manager) UpdateLastRun(ctx context.Context, asOf time.Time) (err error) {
-	_, err = m.updateLastRun.ExecContext(ctx, "default", asOf)
+func (m Manager) UpdateSchedulerLastRun(ctx context.Context, asOf time.Time) (err error) {
+	_, err = m.updateSchedulerLastRun.ExecContext(ctx, "default", asOf)
 	if err != nil {
-		err = fmt.Errorf("updateLastRun: %w", err)
+		err = fmt.Errorf("updateSchedulerLastRun: %w", err)
 	}
 	return
 }
 
 var execUpdateTimers = fmt.Sprintf(`UPDATE %s
 SET
-	due_counter = case when due_counter > 0 then due_counter - 1 else 0 end
-	, attempt_counter = case when attempt_counter > 0 then attempt_counter - 1 else 0 end
-	, retry_counter = case when retry_counter > 0 then retry_counter - 1 else 0 end
-WHERE 
+	due_counter = case 
+		when due_counter > 0 then 
+			due_counter - (case when due_counter < $1 then due_counter else $1 end)
+		else 0 
+	end
+	, attempt_counter = case 
+		when attempt_counter > 0 then 
+			attempt_counter - (case when attempt_counter < $1 then attempt_counter else $1 end)
+		else 0 
+	end
+	, retry_counter = case 
+		when retry_counter > 0 then 
+			retry_counter - (case when retry_counter < $1 then retry_counter else $1 end)
+		else 0 
+	end
+WHERE
 	delivered_utc IS NULL
 	AND attempt < 5
 `, timerTableName)
 
-func (m Manager) UpdateTimers(ctx context.Context, asOf time.Time) (err error) {
-	_, err = m.updateTimers.ExecContext(ctx)
+func (m Manager) UpdateTimers(ctx context.Context, now time.Time, minutesSinceLastUpdate int) (err error) {
+	if minutesSinceLastUpdate == 0 {
+		minutesSinceLastUpdate = 1
+	}
+	_, err = m.updateTimers.ExecContext(ctx, minutesSinceLastUpdate)
 	if err == nil {
-		err = m.UpdateLastRun(ctx, asOf)
+		err = m.UpdateSchedulerLastRun(ctx, now)
 	}
 	return
 }
