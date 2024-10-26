@@ -8,8 +8,8 @@ import "context"
 // on process signals.
 func StartForShutdown(ctx context.Context, hosted ...Service) error {
 	return Graceful{
-		Hosted:          hosted,
-		ShutdownSignals: DefaultShutdownSignals,
-		RestartSignals:  DefaultRestartSignals,
+		Hosted:         hosted,
+		ShutdownSignal: SignalNotify(DefaultShutdownSignals...),
+		RestartSignal:  SignalNotify(DefaultRestartSignals...),
 	}.StartForShutdown(ctx)
 }

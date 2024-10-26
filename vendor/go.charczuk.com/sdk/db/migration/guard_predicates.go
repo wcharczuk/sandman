@@ -108,7 +108,7 @@ func Guard(description string, predicate GuardPredicateFunc) GuardFunc {
 
 		if !proceed {
 			if suite := GetContextSuite(ctx); suite != nil {
-				suite.WriteSkipf(ctx, description)
+				suite.WriteSkip(ctx, description)
 			}
 			return nil
 		}
@@ -121,7 +121,7 @@ func Guard(description string, predicate GuardPredicateFunc) GuardFunc {
 			return err
 		}
 		if suite := GetContextSuite(ctx); suite != nil {
-			suite.WriteApplyf(ctx, description)
+			suite.WriteApply(ctx, description)
 		}
 		return nil
 	}

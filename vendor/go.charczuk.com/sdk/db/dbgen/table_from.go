@@ -41,7 +41,7 @@ func TableFrom(obj any, extra ...string) *migration.Step {
 		} else if column.IsJSON {
 			columnDefinition = fmt.Sprintf("%s%s %s", leadingComma, column.ColumnName, "JSONB")
 		} else {
-			if column.FieldType.Kind() == reflect.Ptr {
+			if fieldTypeIsNullable(column.FieldType) {
 				columnDefinition = fmt.Sprintf("%s%s %s", leadingComma, column.ColumnName, dbTypeForFieldType(column.FieldType))
 			} else {
 				columnDefinition = fmt.Sprintf("%s%s %s NOT NULL", leadingComma, column.ColumnName, dbTypeForFieldType(column.FieldType))
@@ -73,6 +73,15 @@ func TableFrom(obj any, extra ...string) *migration.Step {
 	)
 }
 
+func fieldTypeIsNullable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice:
+		return true
+	default:
+		return false
+	}
+}
+
 func dbTypeForFieldType(t reflect.Type) string {
 	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -94,6 +103,18 @@ func dbTypeForFieldType(t reflect.Type) string {
 		return "REAL"
 	case reflect.Float64:
 		return "DOUBLE PRECISION"
+	case reflect.Array, reflect.Slice:
+		switch t.Name() {
+		case "UUID":
+			if t.PkgPath() == "go.charczuk.com/sdk/uuid" {
+				return "UUID"
+			}
+		}
+		arrayType := t.Elem()
+		switch arrayType.Kind() {
+		case reflect.Uint8:
+			return "BYTES"
+		}
 	default:
 	}
 	switch t.Name() {
@@ -110,7 +131,7 @@ func dbTypeForFieldType(t reflect.Type) string {
 			return "UUID"
 		}
 	}
-	panic(fmt.Sprintf("unknown field type for db: %s/%s", t.PkgPath(), t.Name()))
+	panic(fmt.Sprintf("cannot translate field type for db: %v", t))
 }
 
 func dbAutoForFieldType(t reflect.Type) string {
