@@ -69,12 +69,15 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		s.sleepFor(ctx, delta)
 	}
 
+	// instantaneously kick off a pass
 	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.tickIntervalOrDefault())
 	go func() {
 		defer deadlineCancel()
 		s.processTick(deadlineCtx)
 	}()
 
+	// start the tick loop to iterate
+	// and process timers
 	tick := time.NewTicker(s.tickIntervalOrDefault())
 	defer tick.Stop()
 	for {

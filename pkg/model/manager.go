@@ -173,19 +173,26 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 // queryGetDueTimers is the query to poll for "due" timers
 //
 // when it marks timers for attempts it also advances the assignable time a minute into the future
-var queryGetDueTimers = fmt.Sprintf(`UPDATE
-	%s
+var queryGetDueTimers = fmt.Sprintf(`UPDATE %[1]s
 SET 
 	assigned_worker = $1
 	, attempt = attempt + 1
 	, retry_counter = 5
 WHERE
-	due_counter = 0
-	AND attempt_counter = 0
-	AND retry_counter = 0
-	AND attempt < 5
-	AND delivered_utc IS NULL
-RETURNING %s
+	id in (
+		SELECT id
+		FROM
+			%[1]s
+		WHERE
+			due_counter = 0
+			AND attempt_counter = 0
+			AND retry_counter = 0
+			AND attempt < 5
+			AND delivered_utc IS NULL
+		LIMIT 1000
+		FOR UPDATE SKIP LOCKED
+)
+RETURNING %[2]s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
 func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
