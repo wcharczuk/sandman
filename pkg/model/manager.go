@@ -16,23 +16,35 @@ import (
 type Manager struct {
 	dbutil.BaseManager
 
-	getDueTimers        *sql.Stmt
-	getTimerByName      *sql.Stmt
-	getTimersDueBetween *sql.Stmt
-	getLastRun          *sql.Stmt
-	updateLastRun       *sql.Stmt
-	updateTimers        *sql.Stmt
-	cullTimers          *sql.Stmt
-	markDelivered       *sql.Stmt
-	markAttempted       *sql.Stmt
-	deleteTimerByID     *sql.Stmt
-	deleteTimerByName   *sql.Stmt
+	attemptLeaderElection *sql.Stmt
+	heartbeat             *sql.Stmt
+	getDueTimers          *sql.Stmt
+	getTimerByName        *sql.Stmt
+	getTimersDueBetween   *sql.Stmt
+	getLastRun            *sql.Stmt
+	updateLastRun         *sql.Stmt
+	updateTimers          *sql.Stmt
+	cullTimers            *sql.Stmt
+	markDelivered         *sql.Stmt
+	markAttempted         *sql.Stmt
+	deleteTimerByID       *sql.Stmt
+	deleteTimerByName     *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
+	m.attemptLeaderElection, err = m.Invoke(ctx).Prepare(queryAttemptLeaderElection)
+	if err != nil {
+		err = fmt.Errorf("attemptLeaderElection: %w", err)
+		return
+	}
+	m.heartbeat, err = m.Invoke(ctx).Prepare(execHeartbeat)
+	if err != nil {
+		err = fmt.Errorf("heartbeat: %w", err)
+		return
+	}
 	m.getDueTimers, err = m.Invoke(ctx).Prepare(queryGetDueTimers)
 	if err != nil {
-		err = fmt.Errorf("queryGetDueTimers: %w", err)
+		err = fmt.Errorf("getDueTimers: %w", err)
 		return
 	}
 	m.getTimerByName, err = m.Invoke(ctx).Prepare(queryGetTimerByName)
@@ -89,6 +101,12 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 }
 
 func (m Manager) Close() error {
+	if err := m.attemptLeaderElection.Close(); err != nil {
+		return err
+	}
+	if err := m.heartbeat.Close(); err != nil {
+		return err
+	}
 	if err := m.cullTimers.Close(); err != nil {
 		return err
 	}
@@ -167,6 +185,44 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 			output = append(output, t)
 		}
 	}
+	return
+}
+
+var queryAttemptLeaderElection = fmt.Sprintf(`UPDATE %s
+SET
+	leader = $2
+	, generation = $3+1
+WHERE
+	name = $1
+	AND (generation = $3 OR current_timestamp - last_seen_utc > interval '1 minute')
+RETURNING generation
+`, schedulerTableName)
+
+func (m Manager) AttemptLeaderElection(ctx context.Context, worker string, generation uint64) (newGeneration uint64, leader bool, err error) {
+	var res *sql.Rows
+	res, err = m.attemptLeaderElection.QueryContext(ctx, "default", worker, generation)
+	if err != nil {
+		return
+	}
+	if !res.Next() {
+		return
+	}
+	if err = res.Scan(&newGeneration); err != nil {
+		return
+	}
+	leader = newGeneration == generation
+	return
+}
+
+var execHeartbeat = fmt.Sprintf(`UPDATE %s
+SET 
+	last_seen_utc = current_timestamp
+WHERE
+	name = $1
+`, schedulerTableName)
+
+func (m Manager) Heartbeat(ctx context.Context) (err error) {
+	_, err = m.heartbeat.ExecContext(ctx)
 	return
 }
 

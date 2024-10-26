@@ -10,28 +10,36 @@ import (
 	"sandman/pkg/model"
 )
 
-func New(mgr *model.Manager) *Scheduler {
+func New(identity string, mgr *model.Manager) *Scheduler {
 	return &Scheduler{
 		mgr: mgr,
 	}
 }
 
 type Scheduler struct {
-	mgr          *model.Manager
-	tickInterval time.Duration
+	identity              string
+	mgr                   *model.Manager
+	updateTickInterval    time.Duration
+	heartbeatTickInterval time.Duration
 
+	schedulerGeneration        expvar.Int
 	schedulerTicks             expvar.Int
 	schedulerTickErrors        expvar.Int
 	schedulerElapsedLastMillis expvar.Int
+
+	generation uint64
+	isLeader   bool
 }
 
 type SchedulerVars struct {
+	SchedulerGeneration        *expvar.Int
 	SchedulerTicks             *expvar.Int
 	SchedulerTickErrors        *expvar.Int
 	SchedulerElapsedLastMillis *expvar.Int
 }
 
 func (sv SchedulerVars) Publish() {
+	expvar.Publish("scheduler_generation", sv.SchedulerGeneration)
 	expvar.Publish("scheduler_elapsed_last_millis", sv.SchedulerElapsedLastMillis)
 	expvar.Publish("scheduler_ticks", sv.SchedulerTicks)
 	expvar.Publish("scheduler_tick_errors", sv.SchedulerTickErrors)
@@ -39,22 +47,45 @@ func (sv SchedulerVars) Publish() {
 
 func (s *Scheduler) Vars() SchedulerVars {
 	return SchedulerVars{
+		SchedulerGeneration:        &s.schedulerGeneration,
 		SchedulerTicks:             &s.schedulerTicks,
 		SchedulerTickErrors:        &s.schedulerTickErrors,
 		SchedulerElapsedLastMillis: &s.schedulerElapsedLastMillis,
 	}
 }
 
-const defaultTickInterval = time.Minute
+const defaultUpdateTickInterval = time.Minute
 
-func (s *Scheduler) tickIntervalOrDefault() time.Duration {
-	if s.tickInterval > 0 {
-		return s.tickInterval
+func (s *Scheduler) updateTickIntervalOrDefault() time.Duration {
+	if s.updateTickInterval > 0 {
+		return s.updateTickInterval
 	}
-	return defaultTickInterval
+	return defaultUpdateTickInterval
+}
+
+const defaultHeartbeatTickInterval = time.Minute
+
+func (s *Scheduler) heartbeatTickIntervalOrDefault() time.Duration {
+	if s.heartbeatTickInterval > 0 {
+		return s.heartbeatTickInterval
+	}
+	return defaultHeartbeatTickInterval
 }
 
 func (s *Scheduler) Run(ctx context.Context) error {
+	var err error
+	s.generation, s.isLeader, err = s.mgr.AttemptLeaderElection(ctx, s.identity, s.generation)
+	if err != nil {
+		return err
+	}
+
+	if !s.isLeader {
+		log.GetLogger(ctx).Info("scheduler entering follower mode, polling for new leader")
+		if err = s.awaitNextElection(ctx); err != nil {
+			return err
+		}
+	}
+
 	lastRun, err := s.mgr.GetLastRun(ctx)
 	if err != nil {
 		return err
@@ -70,7 +101,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 	}
 
 	// instantaneously kick off a pass
-	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.tickIntervalOrDefault())
+	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.updateTickIntervalOrDefault())
 	go func() {
 		defer deadlineCancel()
 		s.processTick(deadlineCtx)
@@ -78,21 +109,48 @@ func (s *Scheduler) Run(ctx context.Context) error {
 
 	// start the tick loop to iterate
 	// and process timers
-	tick := time.NewTicker(s.tickIntervalOrDefault())
-	defer tick.Stop()
+	updateTick := time.NewTicker(s.updateTickIntervalOrDefault())
+	defer updateTick.Stop()
+	heartbeatTick := time.NewTicker(s.heartbeatTickIntervalOrDefault())
+	defer updateTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-tick.C:
-			deadlineCtx, deadlineCancel = context.WithTimeout(ctx, s.tickIntervalOrDefault())
+		case <-updateTick.C:
+			deadlineCtx, deadlineCancel = context.WithTimeout(ctx, s.heartbeatTickIntervalOrDefault())
 			go func() {
 				defer deadlineCancel()
 				s.processTick(deadlineCtx)
 			}()
+		case <-heartbeatTick.C:
+			if err = s.mgr.Heartbeat(ctx); err != nil {
+				return err
+			}
 		}
 	}
 }
+
+func (s *Scheduler) awaitNextElection(ctx context.Context) error {
+	ticker := time.NewTicker(s.heartbeatTickIntervalOrDefault())
+	defer ticker.Stop()
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			s.generation, s.isLeader, err = s.mgr.AttemptLeaderElection(ctx, s.identity, s.generation+1)
+			if err != nil {
+				return err
+			}
+			if s.isLeader {
+				return nil
+			}
+		}
+	}
+}
+
 func (w *Scheduler) sleepFor(ctx context.Context, d time.Duration) {
 	t := time.NewTimer(d)
 	defer t.Stop()
