@@ -250,15 +250,15 @@ WHERE
 			AND retry_counter = 0
 			AND attempt < 5
 			AND delivered_utc IS NULL
-		LIMIT 1000
+		LIMIT $2
 		FOR UPDATE SKIP LOCKED
 )
 RETURNING %[2]s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
-func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string) (output []Timer, err error) {
+func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, batchSize int) (output []Timer, err error) {
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, batchSize)
 	if err != nil {
 		return
 	}

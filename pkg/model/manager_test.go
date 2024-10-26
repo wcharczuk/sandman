@@ -67,7 +67,7 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 	})
 	assert.ItsNil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker")
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", 10)
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 2, len(timers))
 }

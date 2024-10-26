@@ -16,12 +16,16 @@ import (
 )
 
 // New returns a new worker.
-func New(identity string, mgr *model.Manager) *Worker {
-	return &Worker{
+func New(identity string, mgr *model.Manager, opts ...WorkerOption) *Worker {
+	w := &Worker{
 		identity: identity,
 		mgr:      mgr,
 		http:     new(http.Transport),
 	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
 }
 
 type WorkerOption func(*Worker)
@@ -38,12 +42,19 @@ func OptTickInterval(tickInterval time.Duration) WorkerOption {
 	}
 }
 
+func OptBatchSize(batchSize int) WorkerOption {
+	return func(w *Worker) {
+		w.batchSize = batchSize
+	}
+}
+
 type Worker struct {
 	identity string
 	mgr      *model.Manager
 
 	parallelism  int
 	tickInterval time.Duration
+	batchSize    int
 
 	http *http.Transport
 
@@ -107,8 +118,17 @@ func (w *Worker) parallelismOrDefault() int {
 	return defaultParallelism
 }
 
+const defaultBatchSize = 1000
+
+func (w *Worker) batchSizeOrDefault() int {
+	if w.batchSize > 0 {
+		return w.batchSize
+	}
+	return defaultBatchSize
+}
+
 func (w *Worker) processTick(ctx context.Context) {
-	timers, err := w.mgr.GetDueTimers(ctx, w.identity)
+	timers, err := w.mgr.GetDueTimers(ctx, w.identity, w.batchSizeOrDefault())
 	if err != nil {
 		log.GetLogger(ctx).Error("worker; failed to get timers", log.Any("err", err))
 		return
