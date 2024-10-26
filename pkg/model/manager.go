@@ -208,14 +208,12 @@ func (m Manager) SchedulerLeaderElection(ctx context.Context, namespace string, 
 		return
 	}
 	if !res.Next() {
-		fmt.Printf("SchedulerLeaderElection: no rows returned\n")
 		return
 	}
 	var currentLeader string
 	if err = res.Scan(&currentLeader, &newGeneration); err != nil {
 		return
 	}
-	fmt.Printf("SchedulerLeaderElection: %v vs. %v\n", currentLeader, worker)
 	isLeader = worker == currentLeader
 	return
 }

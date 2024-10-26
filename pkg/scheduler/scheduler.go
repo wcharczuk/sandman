@@ -142,7 +142,7 @@ func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 		return err
 	}
 
-	log.GetLogger(ctx).Info("scheduler; tick loop to the last scheduler run", log.Any("state", s.state))
+	log.GetLogger(ctx).Info("scheduler; aligning tick loop to the last scheduler run", log.Any("state", s.state))
 	lastUpdated, err := s.alignUpdateTicksToLastRun(ctx)
 	if err != nil {
 		return err
@@ -195,6 +195,12 @@ func (s *Scheduler) alignUpdateTicksToLastRun(ctx context.Context) (time.Time, e
 	} else if sinceLastRun := time.Now().UTC().Sub(lastRun.UTC()); sinceLastRun < time.Minute {
 		delta := time.Minute - sinceLastRun // wait at least a minute
 		log.GetLogger(ctx).Info("scheduler; sleeping to align updates to last run", log.Duration("for", delta), log.Any("state", s.state))
+		if err = s.sleepFor(ctx, delta); err != nil {
+			return time.Time{}, err
+		}
+	} else {
+		delta := s.getMinuteAlignment(lastRun) // TODO(wc): this doesn't work.
+		log.GetLogger(ctx).Info("scheduler; sleeping to align updates to last run (more than 1m ago)", log.Duration("for", delta), log.Any("state", s.state))
 		if err = s.sleepFor(ctx, delta); err != nil {
 			return time.Time{}, err
 		}
