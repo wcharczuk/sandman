@@ -69,17 +69,6 @@ type Invocation struct {
 	started time.Time
 }
 
-// Prepare returns a prepared statement.
-func (i *Invocation) Prepare(statement string) (res *sql.Stmt, err error) {
-	statement, err = i.start(statement)
-	if err != nil {
-		return
-	}
-	defer func() { err = i.finish(statement, recover(), nil, err) }()
-	res, err = i.db.PrepareContext(i.ctx, statement)
-	return
-}
-
 // Exec executes a sql statement with a given set of arguments and returns the rows affected.
 func (i *Invocation) Exec(statement string, args ...interface{}) (res sql.Result, err error) {
 	statement, err = i.start(statement)

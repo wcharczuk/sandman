@@ -5,18 +5,16 @@ import (
 	"errors"
 	"os"
 	"sync"
-	"time"
 
 	"go.charczuk.com/sdk/errutil"
 )
 
 // Graceful is the main entrypoint for hosting graceful processes.
 type Graceful struct {
-	Hosted              []Service
-	ShutdownSignal      chan os.Signal
-	RestartSignal       chan os.Signal
-	ShutdownGracePeriod time.Duration
-	Log                 Logger
+	Hosted          []Service
+	ShutdownSignals []os.Signal
+	RestartSignals  []os.Signal
+	Log             Logger
 }
 
 // StartForShutdown starts, and prepares to gracefully stop, a set hosted
@@ -29,27 +27,29 @@ func (g Graceful) StartForShutdown(ctx context.Context) error {
 	shouldRestart := make(chan struct{})
 	serverExited := make(chan struct{})
 
-	if g.ShutdownSignal != nil {
+	if len(g.ShutdownSignals) > 0 {
+		notifyShutdown := SignalNotify(g.ShutdownSignals...)
 		go func() {
 			MaybeDebugf(g.Log, "graceful background; waiting for shutdown signal")
 			select {
 			case <-ctx.Done():
 				return
-			case <-g.ShutdownSignal:
+			case <-notifyShutdown:
 				MaybeDebugf(g.Log, "graceful background; shutdown signal received, canceling context")
 				_ = safelyClose(shouldShutdown)
 			}
 		}()
 	}
 
-	if g.RestartSignal != nil {
+	if len(g.RestartSignals) > 0 {
+		restart := SignalNotify(g.RestartSignals...)
 		go func() {
 			for {
 				MaybeDebugf(g.Log, "graceful background; waiting for restart signal")
 				select {
 				case <-ctx.Done():
 					return
-				case <-g.RestartSignal:
+				case <-restart:
 					// NOTE(wc): we don't close here because we may need to do this more than once!
 					shouldRestart <- struct{}{}
 					MaybeDebugf(g.Log, "graceful background; shutdown signal received, canceling context")
@@ -99,13 +99,13 @@ func (g Graceful) StartForShutdown(ctx context.Context) error {
 	select {
 	case <-ctx.Done(): // if we've issued a shutdown, wait for the server to exit
 		_ = safelyClose(shouldShutdown)
-		g.gracefulShutdown(ctx, &waitShutdownComplete, &waitServerExited)
+		waitShutdownComplete.Wait()
+		waitServerExited.Wait()
 	case <-serverExited:
 		// if any of the servers exited on their
 		// own, we should crash the whole party
 		_ = safelyClose(shouldShutdown)
 		waitShutdownComplete.Wait()
-		g.gracefulExit(ctx, &waitShutdownComplete)
 	}
 	if errorCount := len(hostedErrors); errorCount > 0 {
 		var err error
@@ -115,51 +115,6 @@ func (g Graceful) StartForShutdown(ctx context.Context) error {
 		return err
 	}
 	return nil
-}
-
-func (g Graceful) gracefulShutdown(ctx context.Context, waitShutdownComplete, waitServerExited *sync.WaitGroup) {
-	if g.ShutdownGracePeriod > 0 {
-		didShutdown := make(chan struct{})
-		go func() {
-			defer safelyClose(didShutdown)
-			waitShutdownComplete.Wait()
-			waitServerExited.Wait()
-		}()
-
-		mustShutdownTimer := time.NewTimer(g.ShutdownGracePeriod)
-		defer mustShutdownTimer.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-mustShutdownTimer.C:
-			return
-		case <-didShutdown:
-			return
-		}
-	}
-	waitShutdownComplete.Wait()
-	waitServerExited.Wait()
-}
-
-func (g Graceful) gracefulExit(ctx context.Context, waitShutdownComplete *sync.WaitGroup) {
-	if g.ShutdownGracePeriod > 0 {
-		didShutdown := make(chan struct{})
-		go func() {
-			defer safelyClose(didShutdown)
-			waitShutdownComplete.Wait()
-		}()
-		mustShutdownTimer := time.NewTimer(g.ShutdownGracePeriod)
-		defer mustShutdownTimer.Stop()
-		select {
-		case <-ctx.Done():
-			return
-		case <-mustShutdownTimer.C:
-			return
-		case <-didShutdown:
-			return
-		}
-	}
-	waitShutdownComplete.Wait()
 }
 
 func safelyClose(c chan struct{}) (err error) {

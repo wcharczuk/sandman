@@ -102,25 +102,11 @@ const (
 	StatTotal   = "total"
 )
 
-// WriteApply writes an applied step message.
-func (s *Suite) WriteApply(ctx context.Context, format string) {
-	s.Stats.Applied++
-	s.Stats.Total++
-	s.Write(ctx, StatApplied, format)
-}
-
 // WriteApplyf writes an applied step message.
 func (s *Suite) WriteApplyf(ctx context.Context, format string, args ...interface{}) {
 	s.Stats.Applied++
 	s.Stats.Total++
 	s.Write(ctx, StatApplied, fmt.Sprintf(format, args...))
-}
-
-// WriteSkip skips a given step.
-func (s *Suite) WriteSkip(ctx context.Context, format string) {
-	s.Stats.Skipped++
-	s.Stats.Total++
-	s.Write(ctx, StatSkipped, format)
 }
 
 // WriteSkipf skips a given step.

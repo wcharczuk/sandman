@@ -59,7 +59,7 @@ func OptWithDefaultDB(opts ...db.Option) Option {
 			if err := _defaultDB.Close(); err != nil {
 				return err
 			}
-			return DropTestDatabase(ctx, _defaultDB, opts...)
+			return DropTestDatabase(ctx, _defaultDB)
 		})
 	}
 }
