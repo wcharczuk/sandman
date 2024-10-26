@@ -88,6 +88,43 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 	return
 }
 
+func (m Manager) Close() error {
+	if err := m.cullTimers.Close(); err != nil {
+		return err
+	}
+	if err := m.deleteTimerByID.Close(); err != nil {
+		return err
+	}
+	if err := m.deleteTimerByName.Close(); err != nil {
+		return err
+	}
+	if err := m.getDueTimers.Close(); err != nil {
+		return err
+	}
+	if err := m.getLastRun.Close(); err != nil {
+		return err
+	}
+	if err := m.getTimerByName.Close(); err != nil {
+		return err
+	}
+	if err := m.getTimersDueBetween.Close(); err != nil {
+		return err
+	}
+	if err := m.markAttempted.Close(); err != nil {
+		return err
+	}
+	if err := m.markDelivered.Close(); err != nil {
+		return err
+	}
+	if err := m.updateLastRun.Close(); err != nil {
+		return err
+	}
+	if err := m.updateTimers.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 var queryGetTimerByName = fmt.Sprintf(`SELECT %s FROM %s WHERE name = $1`, db.ColumnNamesCSV(timerColumns), timerTableName)
 
 func (m Manager) GetTimerByName(ctx context.Context, name string) (out Timer, found bool, err error) {
@@ -198,8 +235,8 @@ SET
 	, attempt_counter = case when attempt_counter > 0 then attempt_counter - 1 else 0 end
 	, retry_counter = case when retry_counter > 0 then retry_counter - 1 else 0 end
 WHERE 
-	delivered_utc IS NOT NULL
-	OR attempt >= 5
+	delivered_utc IS NULL
+	AND attempt < 5
 `, timerTableName)
 
 func (m Manager) UpdateTimers(ctx context.Context, asOf time.Time) (err error) {

@@ -134,43 +134,72 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 			}
 		}()
 
-		var body io.Reader
-		if rawBody := t.HookBody; len(rawBody) > 0 {
-			body = bytes.NewReader(rawBody)
-		}
-
-		var method string
-		if hookMethod := t.HookMethod; hookMethod != "" {
-			method = hookMethod
-		} else {
-			method = http.MethodPost
-		}
-
-		req, remoteErr := http.NewRequestWithContext(ctx, method, t.HookURL, body)
-		if remoteErr != nil {
-			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to parse hook details: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
-			return nil
-		}
-		req.Header = w.metadata(t)
-		client := &http.Client{
-			Transport: w.http,
-		}
-		res, remoteErr := client.Do(req)
+		started := time.Now()
+		var res *http.Response
+		res, remoteErr = w.makeHookRequest(t)
 		if remoteErr != nil || res.StatusCode >= http.StatusBadRequest {
-			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t, log.String("err_type", "remote"))...)
-			internalErr = w.mgr.MarkAttempted(ctx, t.ID, uint32(res.StatusCode), remoteErr)
+			var statusCode int
+			if res != nil {
+				statusCode = res.StatusCode
+			}
+			if remoteErr != nil {
+				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t,
+					log.String("err_type", "remote"),
+					log.Duration("elapsed", time.Since(started)),
+				)...)
+			} else {
+				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: non-200 status code returned %d", statusCode), w.logAttrs(t,
+					log.String("err_type", "remote"),
+					log.Duration("elapsed", time.Since(started)),
+				)...)
+			}
+			internalErr = w.mgr.MarkAttempted(ctx, t.ID, uint32(statusCode), remoteErr)
 			if internalErr != nil {
-				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark attempted: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
+				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark attempted: %w", internalErr), w.logAttrs(t,
+					log.String("err_type", "internal"),
+					log.Duration("elapsed", time.Since(started)),
+				)...)
 			}
 			return nil
 		}
 		internalErr = w.mgr.MarkDelivered(ctx, t.ID)
 		if internalErr != nil {
-			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark delivered: %w", internalErr), w.logAttrs(t, log.String("err_type", "internal"))...)
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark delivered: %w", internalErr), w.logAttrs(t,
+				log.String("err_type", "internal"),
+				log.Duration("elapsed", time.Since(started)),
+			)...)
 		}
-		log.GetLogger(ctx).Info("worker; delivery success", w.logAttrs(t)...)
+		log.GetLogger(ctx).Info("worker; delivery success", w.logAttrs(t,
+			log.Duration("elapsed", time.Since(started)),
+		)...)
 		return nil
 	}
+}
+
+func (w *Worker) makeHookRequest(t *model.Timer) (*http.Response, error) {
+	var body io.Reader
+	if rawBody := t.HookBody; len(rawBody) > 0 {
+		body = bytes.NewReader(rawBody)
+	}
+
+	var method string
+	if hookMethod := t.HookMethod; hookMethod != "" {
+		method = hookMethod
+	} else {
+		method = http.MethodPost
+	}
+
+	requestContext, cancelTimeout := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelTimeout()
+	req, err := http.NewRequestWithContext(requestContext, method, t.HookURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse hook details: %w", err)
+	}
+	req.Header = w.metadata(t)
+	client := &http.Client{
+		Transport: w.http,
+	}
+	return client.Do(req)
 }
 
 func (w *Worker) logAttrs(t *model.Timer, extra ...any) []any {

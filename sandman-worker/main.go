@@ -38,7 +38,8 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		w := worker.New("worker", modelMgr)
+		workerID, _ := os.Hostname()
+		w := worker.New(workerID, modelMgr)
 		w.Vars().Publish()
 		go func() {
 			if err := http.ListenAndServe(expvarBindAddr(), expvar.Handler()); err != nil {
