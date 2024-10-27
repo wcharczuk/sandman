@@ -24,7 +24,7 @@ The design goals with `sandman` are as follows:
 - [Hashed and hierarchical timing wheels](https://dl.acm.org/doi/10.1145/41457.37504) to structure the timers
 - [CockroachDB](https://www.cockroachlabs.com/) to scale the database layer horizontally
 
-Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because the index needs to be updated for each timer inserted. 
+Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because table indexes need to be updated for each timer inserted.
 
 `sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due. 
 
