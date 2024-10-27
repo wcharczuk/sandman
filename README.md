@@ -11,13 +11,21 @@
 
 Think of it as an answer to the question; how would we handle needing to send ~1 million webhooks at a specific point in the future within the same minute?
 
+# Goals
+
+The design goals with `sandman` are as follows:
+
+1. Support sending ~1 million timer "hooks" per minute at arbitrary points in the future.
+2. Support some fixed nominal retry count for each hook.
+3. Support basic "priorities" with timers such that we can customize the order that the timers are processed.
+
 # General Approach
 
 `sandman` leans on two basic concepts to achieve scale
-- [Hashed and hierarchical timing wheels](https://dl.acm.org/doi/10.1145/41457.37504)
-- CockroachDB + scaling horizontally
+- [Hashed and hierarchical timing wheels](https://dl.acm.org/doi/10.1145/41457.37504) to structure the timers
+- [CockroachDB](https://www.cockroachlabs.com/) to scale the database layer horizontally
 
-Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered somewhat quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because the index needs to be updated for each timer inserted. 
+Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because the index needs to be updated for each timer inserted. 
 
 `sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due. 
 
