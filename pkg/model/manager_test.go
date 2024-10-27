@@ -225,3 +225,119 @@ func Test_Manager_UpdateTimers_multiMinuteUpdate(t *testing.T) {
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t1.ID) && t.AttemptCounter == 0 })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t2.ID) && t.DueCounter == 0 })
 }
+
+func Test_Manager_SchedulerLeaderElection_initial(t *testing.T) {
+	/*
+		Assert that the leader election works on a "fresh" state where
+		we don't have a leader heartbeat time, and the generation is 0
+	*/
+
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	createTestNamespace(t, tx, NamespaceTesting)
+
+	leaderTimeout := 30 * time.Second
+	now := time.Date(2024, 10, 27, 19, 18, 17, 16, time.UTC)
+
+	generation, isLeader, err := modelMgr.SchedulerLeaderElection(ctx, NamespaceTesting, "test-worker", 0, now, leaderTimeout)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, true, isLeader)
+	assert.ItsEqual(t, 1, generation)
+}
+
+func Test_Manager_SchedulerLeaderElection_initial_existingLeader(t *testing.T) {
+	/*
+		Assert that the leader election works on a "valid" state where
+		we do have a leader heartbeat time (which is not expired), and the generation is 5
+	*/
+
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	createTestNamespace(t, tx, NamespaceTesting)
+
+	leaderTimeout := 30 * time.Second
+	now := time.Date(2024, 10, 27, 19, 18, 17, 16, time.UTC)
+	lastSeen := now.Add(-10 * time.Second)
+
+	_ = modelMgr.Invoke(ctx).Upsert(&SchedulerLeader{
+		Namespace:   NamespaceTesting,
+		Generation:  5,
+		Leader:      ref("not-test-worker"),
+		LastSeenUTC: ref(lastSeen),
+	})
+
+	generation, isLeader, err := modelMgr.SchedulerLeaderElection(ctx, NamespaceTesting, "test-worker", 0, now, leaderTimeout)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, false, isLeader)
+	assert.ItsEqual(t, 5, generation)
+}
+
+func Test_Manager_SchedulerLeaderElection_initial_existingLeader_timedout(t *testing.T) {
+	/*
+		Assert that the leader election works on a "timedout" state where
+		we do have a leader heartbeat time (which is expired), and the generation is 5
+	*/
+
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	createTestNamespace(t, tx, NamespaceTesting)
+
+	leaderTimeout := 30 * time.Second
+	now := time.Date(2024, 10, 27, 19, 18, 17, 0, time.UTC)
+	lastSeen := now.Add(-(leaderTimeout * 2))
+
+	_ = modelMgr.Invoke(ctx).Upsert(&SchedulerLeader{
+		Namespace:   NamespaceTesting,
+		Generation:  5,
+		Leader:      ref("not-test-worker"),
+		LastSeenUTC: ref(lastSeen),
+	})
+
+	generation, isLeader, err := modelMgr.SchedulerLeaderElection(ctx, NamespaceTesting, "test-worker", 5, now, 30*time.Second)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, true, isLeader)
+	assert.ItsEqual(t, 6, generation)
+}
+
+func ref[A any](v A) *A {
+	return &v
+}

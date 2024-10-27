@@ -20,7 +20,7 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 				migration.NewGroupWithAction(
 					dbgen.TableFrom(
 						SchedulerLeader{},
-						"INSERT INTO scheduler_leader (generation) VALUES (0)",
+						"INSERT INTO scheduler_leader (namespace, generation) VALUES ('default', 0)",
 					),
 				),
 			),
@@ -28,7 +28,7 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 				migration.NewGroupWithAction(
 					dbgen.TableFrom(
 						SchedulerLastRun{},
-						"INSERT INTO scheduler_last_run (last_run_utc) VALUES (current_timestamp)",
+						"INSERT INTO scheduler_last_run (namespace, last_run_utc) VALUES ('default', current_timestamp)",
 					),
 				),
 			),

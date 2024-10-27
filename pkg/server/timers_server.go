@@ -41,15 +41,15 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	if strings.ToLower(t.GetHookMethod()) == http.MethodGet && len(t.GetHookBody()) > 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid hook; `hook_method` cannot be GET with a body specified")
 	}
-	now := time.Now().UTC()
+	nowUTC := time.Now().UTC()
 	dueUTC := t.GetDueUtc().AsTime()
 
 	newTimer := model.Timer{
 		Name:        t.GetName(),
 		Labels:      t.GetLabels(),
-		CreatedUTC:  now,
+		CreatedUTC:  nowUTC,
 		DueUTC:      dueUTC,
-		DueCounter:  minutesUntil(now, dueUTC),
+		DueCounter:  minutesUntil(nowUTC, dueUTC),
 		HookURL:     t.GetHookUrl(),
 		HookMethod:  t.GetHookMethod(),
 		HookHeaders: t.GetHookHeaders(),
@@ -67,9 +67,9 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 func minutesUntil(now, dueUTC time.Time) uint64 {
 	diff := dueUTC.Sub(now)
 	if diff <= 0 {
-		return 0
+		return 1
 	}
-	return uint64(diff / time.Minute)
+	return uint64(diff/time.Minute) + 1
 }
 
 func (s TimerServer) ListTimers(ctx context.Context, args *sandmanv1.ListTimersArgs) (*sandmanv1.ListTimersResponse, error) {

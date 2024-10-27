@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"expvar"
+	"os"
 	"time"
 
 	"go.charczuk.com/sdk/log"
@@ -10,7 +11,11 @@ import (
 	"sandman/pkg/model"
 )
 
+// New returns a new scheduler.
 func New(identity string, mgr *model.Manager) *Scheduler {
+	if identity == "" {
+		panic(`scheduler; identity is required`)
+	}
 	return &Scheduler{
 		identity: identity,
 		mgr:      mgr,
@@ -46,13 +51,18 @@ const (
 )
 
 type Scheduler struct {
-	identity              string
-	mgr                   *model.Manager
-	updateTickInterval    time.Duration
-	heartbeatTickInterval time.Duration
-	generation            uint64
-	state                 SchedulerState
-	vars                  SchedulerVars
+	namespace string
+	identity  string
+	mgr       *model.Manager
+
+	updateTimerTickInterval     time.Duration
+	leaderHeartbeatTickInterval time.Duration
+	leaderTimeout               time.Duration
+	electionTickInterval        time.Duration
+
+	generation uint64
+	state      SchedulerState
+	vars       SchedulerVars
 }
 
 type SchedulerVars struct {
@@ -73,22 +83,57 @@ func (s *Scheduler) Vars() SchedulerVars {
 	return s.vars
 }
 
-const defaultUpdateTickInterval = time.Minute
-
-func (s *Scheduler) updateTickIntervalOrDefault() time.Duration {
-	if s.updateTickInterval > 0 {
-		return s.updateTickInterval
+func (s *Scheduler) identityOrDefault() string {
+	if s.identity != "" {
+		return s.identity
 	}
-	return defaultUpdateTickInterval
+	hostname, _ := os.Hostname()
+	return hostname
 }
 
-const defaultHeartbeatTickInterval = time.Minute
-
-func (s *Scheduler) heartbeatTickIntervalOrDefault() time.Duration {
-	if s.heartbeatTickInterval > 0 {
-		return s.heartbeatTickInterval
+func (s *Scheduler) namespaceOrDefault() string {
+	if s.namespace != "" {
+		return s.namespace
 	}
-	return defaultHeartbeatTickInterval
+	return model.NamespaceDefault
+}
+
+const defaultUpdateTimerTickInterval = time.Minute
+
+func (s *Scheduler) updateTimerTickIntervalOrDefault() time.Duration {
+	if s.updateTimerTickInterval > 0 {
+		return s.updateTimerTickInterval
+	}
+	return defaultUpdateTimerTickInterval
+}
+
+const defaultLeaderHeartbeatTickInterval = 10 * time.Second
+
+func (s *Scheduler) leaderHeartbeatTickIntervalOrDefault() time.Duration {
+	if s.leaderHeartbeatTickInterval > 0 {
+		return s.leaderHeartbeatTickInterval
+	}
+	return defaultLeaderHeartbeatTickInterval
+}
+
+// defaultElectionTickInterval is the default interval to check for
+// timed out leaders, and race to elect a new leader.
+const defaultElectionTickInterval = 5 * time.Second
+
+func (s *Scheduler) electionTickIntervalOrDefault() time.Duration {
+	if s.electionTickInterval > 0 {
+		return s.electionTickInterval
+	}
+	return defaultElectionTickInterval
+}
+
+const defaultLeaderTimeout = 30 * time.Second
+
+func (s *Scheduler) leaderTimeoutOrDefault() time.Duration {
+	if s.leaderTimeout > 0 {
+		return s.leaderTimeout
+	}
+	return defaultLeaderTimeout
 }
 
 // Run operates the primary run-loop that handles the (3) different states
@@ -120,7 +165,10 @@ func (s *Scheduler) stateIsUnknown(ctx context.Context) error {
 	s.state = SchedulerStateElection
 	var isLeader bool
 	var err error
-	s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.identity, s.generation)
+	log.GetLogger(ctx).Info("scheduler; triggering election", log.Any("state", s.state))
+
+	nowUTC := time.Now().UTC()
+	s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.namespaceOrDefault(), s.identityOrDefault(), s.generation, nowUTC, s.leaderTimeoutOrDefault())
 	if err != nil {
 		return err
 	}
@@ -138,7 +186,8 @@ func (s *Scheduler) stateIsFollower(ctx context.Context) error {
 
 func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 	log.GetLogger(ctx).Info("scheduler; sending initial heartbeat", log.Any("state", s.state))
-	if err := s.mgr.SchedulerHeartbeat(ctx, s.identity); err != nil {
+	nowUTC := time.Now().UTC()
+	if err := s.mgr.SchedulerHeartbeat(ctx, s.namespaceOrDefault(), s.identityOrDefault(), nowUTC); err != nil {
 		return err
 	}
 
@@ -148,10 +197,11 @@ func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 		return err
 	}
 
-	updateTick := time.NewTicker(s.updateTickIntervalOrDefault())
+	updateTick := time.NewTicker(s.updateTimerTickIntervalOrDefault())
 	defer updateTick.Stop()
-	heartbeatTick := time.NewTicker(s.heartbeatTickIntervalOrDefault())
-	defer updateTick.Stop()
+	leaderHeartbeatTick := time.NewTicker(s.leaderHeartbeatTickIntervalOrDefault())
+	defer leaderHeartbeatTick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -162,9 +212,10 @@ func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 				return err
 			}
 			lastUpdated = time.Now().UTC()
-		case <-heartbeatTick.C:
+		case <-leaderHeartbeatTick.C:
 			log.GetLogger(ctx).Info("scheduler; writing heartbeat", log.Any("state", s.state))
-			if err = s.mgr.SchedulerHeartbeat(ctx, s.identity); err != nil {
+			nowUTC := time.Now().UTC()
+			if err = s.mgr.SchedulerHeartbeat(ctx, s.namespaceOrDefault(), s.identityOrDefault(), nowUTC); err != nil {
 				return err
 			}
 		}
@@ -172,16 +223,16 @@ func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 }
 
 func (s *Scheduler) updateTimers(ctx context.Context, now, lastUpdated time.Time) error {
-	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.updateTickIntervalOrDefault())
+	deadlineCtx, deadlineCancel := context.WithTimeout(ctx, s.updateTimerTickIntervalOrDefault())
 	go func() {
 		defer deadlineCancel()
 		s.processTick(deadlineCtx, now, lastUpdated)
 	}()
-	return nil
+	return s.mgr.UpdateSchedulerLastRun(ctx, s.namespaceOrDefault(), s.identityOrDefault(), now)
 }
 
 func (s *Scheduler) alignUpdateTicksToLastRun(ctx context.Context) (time.Time, error) {
-	lastRun, err := s.mgr.GetSchedulerLastRun(ctx)
+	lastRun, err := s.mgr.GetSchedulerLastRun(ctx, s.namespaceOrDefault())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -189,19 +240,19 @@ func (s *Scheduler) alignUpdateTicksToLastRun(ctx context.Context) (time.Time, e
 		now := time.Now().UTC()
 		delta := s.getMinuteAlignment(now)
 		log.GetLogger(ctx).Info("scheduler; sleeping to align updates to initial minute", log.Duration("for", delta), log.Any("state", s.state))
-		if err = s.sleepFor(ctx, delta); err != nil {
+		if err = s.sleepAsLeaderFor(ctx, delta); err != nil {
 			return now, err
 		}
 	} else if sinceLastRun := time.Now().UTC().Sub(lastRun.UTC()); sinceLastRun < time.Minute {
 		delta := time.Minute - sinceLastRun // wait at least a minute
 		log.GetLogger(ctx).Info("scheduler; sleeping to align updates to last run", log.Duration("for", delta), log.Any("state", s.state))
-		if err = s.sleepFor(ctx, delta); err != nil {
+		if err = s.sleepAsLeaderFor(ctx, delta); err != nil {
 			return time.Time{}, err
 		}
 	} else {
 		delta := s.getMinuteAlignment(lastRun) // TODO(wc): this doesn't work.
 		log.GetLogger(ctx).Info("scheduler; sleeping to align updates to last run (more than 1m ago)", log.Duration("for", delta), log.Any("state", s.state))
-		if err = s.sleepFor(ctx, delta); err != nil {
+		if err = s.sleepAsLeaderFor(ctx, delta); err != nil {
 			return time.Time{}, err
 		}
 	}
@@ -216,16 +267,18 @@ func (s *Scheduler) getMinuteAlignment(now time.Time) time.Duration {
 
 func (s *Scheduler) awaitNextElection(ctx context.Context) error {
 	log.GetLogger(ctx).Info("scheduler; awaiting next election", log.Any("state", s.state))
-	ticker := time.NewTicker(s.heartbeatTickIntervalOrDefault())
-	defer ticker.Stop()
+	electionTicker := time.NewTicker(s.electionTickIntervalOrDefault())
+	defer electionTicker.Stop()
 	var err error
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-electionTicker.C:
 			var isLeader bool
-			s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.identity, s.generation+1)
+			log.GetLogger(ctx).Info("scheduler; triggering election", log.Any("state", s.state))
+			nowUTC := time.Now().UTC()
+			s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.namespaceOrDefault(), s.identityOrDefault(), s.generation+1, nowUTC, s.leaderTimeoutOrDefault())
 			if err != nil {
 				return err
 			}
@@ -238,14 +291,25 @@ func (s *Scheduler) awaitNextElection(ctx context.Context) error {
 	}
 }
 
-func (s *Scheduler) sleepFor(ctx context.Context, d time.Duration) error {
+func (s *Scheduler) sleepAsLeaderFor(ctx context.Context, d time.Duration) error {
+	hb := time.NewTicker(s.leaderHeartbeatTickIntervalOrDefault())
+	defer hb.Stop()
 	t := time.NewTimer(d)
 	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return context.Canceled
-	case <-t.C:
-		return nil
+	var err error
+	for {
+		select {
+		case <-hb.C:
+			log.GetLogger(ctx).Info("scheduler; during sleep; writing heartbeat", log.Any("state", s.state))
+			nowUTC := time.Now().UTC()
+			if err = s.mgr.SchedulerHeartbeat(ctx, s.namespaceOrDefault(), s.identityOrDefault(), nowUTC); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return context.Canceled
+		case <-t.C:
+			return nil
+		}
 	}
 }
 

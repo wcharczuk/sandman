@@ -15,6 +15,7 @@ var (
 )
 
 type SchedulerLeader struct {
+	Namespace   string     `db:"namespace,pk"`
 	Generation  uint64     `db:"generation"`
 	Leader      *string    `db:"leader"`
 	LastSeenUTC *time.Time `db:"last_seen_utc"`
