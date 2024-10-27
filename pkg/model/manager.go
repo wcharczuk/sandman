@@ -192,28 +192,29 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 
 var querySchedulerLeaderElection = fmt.Sprintf(`UPDATE %s
 SET
-	leader = $2
-	, generation = $3+1
+	leader = $1
+	, generation = $2+1
 WHERE
-	namespace = $1
-	AND (generation = $3 OR current_timestamp - last_seen_utc >= interval '1 minute')
-RETURNING leader, generation
-`, schedulerLeaderTableName)
+	generation = $2
+	AND (last_seen_utc is null or current_timestamp - last_seen_utc >= interval '1 minute')
+RETURNING leader, generation`, schedulerLeaderTableName)
 
-func (m Manager) SchedulerLeaderElection(ctx context.Context, namespace string, worker string, generation uint64) (newGeneration uint64, isLeader bool, err error) {
-	fmt.Printf("SchedulerLeaderElection: using namespace=%s worker=%s and generation=%d\n", namespace, worker, generation)
+func (m Manager) SchedulerLeaderElection(ctx context.Context, worker string, generation uint64) (newGeneration uint64, isLeader bool, err error) {
+	println("scheduler leader election;", worker, generation)
 	var res *sql.Rows
-	res, err = m.schedulerLeaderElection.QueryContext(ctx, namespace, worker, generation)
+	res, err = m.schedulerLeaderElection.QueryContext(ctx, worker, generation)
 	if err != nil {
 		return
 	}
 	if !res.Next() {
+		println("scheduler leader election; no rows returned")
 		return
 	}
 	var currentLeader string
 	if err = res.Scan(&currentLeader, &newGeneration); err != nil {
 		return
 	}
+	println("scheduler leader election; current leader", currentLeader)
 	isLeader = worker == currentLeader
 	return
 }
@@ -222,12 +223,11 @@ var execSchedulerLeaderHeartbeat = fmt.Sprintf(`UPDATE %s
 SET 
 	last_seen_utc = current_timestamp
 WHERE
-	namespace = $1
-	AND leader = $2
+	leader = $1
 `, schedulerLeaderTableName)
 
-func (m Manager) SchedulerHeartbeat(ctx context.Context, namespace, worker string) (err error) {
-	_, err = m.schedulerLeaderHeartbeat.ExecContext(ctx, namespace, worker)
+func (m Manager) SchedulerHeartbeat(ctx context.Context, worker string) (err error) {
+	_, err = m.schedulerLeaderHeartbeat.ExecContext(ctx, worker)
 	return
 }
 
@@ -272,12 +272,11 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, batchS
 	return
 }
 
-var queryGetSchedulerLastRun = fmt.Sprintf(`SELECT last_run FROM %s WHERE name = $1`, schedulerLastRunTableName)
+var queryGetSchedulerLastRun = fmt.Sprintf(`SELECT last_run_utc FROM %s LIMIT 1`, schedulerLastRunTableName)
 
 func (m Manager) GetSchedulerLastRun(ctx context.Context) (lastRun time.Time, err error) {
-	res, err := m.getSchedulerLastRun.QueryContext(ctx, "default")
+	res, err := m.getSchedulerLastRun.QueryContext(ctx)
 	if err != nil {
-		err = fmt.Errorf("getSchedulerLastRun: %w", err)
 		return
 	}
 	if !res.Next() {
@@ -287,13 +286,10 @@ func (m Manager) GetSchedulerLastRun(ctx context.Context) (lastRun time.Time, er
 	return
 }
 
-var execUpdateSchedulerLastRun = fmt.Sprintf(`INSERT INTO %s (name, last_run) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET last_run = $2`, schedulerLastRunTableName)
+var execUpdateSchedulerLastRun = fmt.Sprintf(`UPDATE %s SET worker = $1, last_run_utc = $2 WHERE 1=1`, schedulerLastRunTableName)
 
-func (m Manager) UpdateSchedulerLastRun(ctx context.Context, asOf time.Time) (err error) {
-	_, err = m.updateSchedulerLastRun.ExecContext(ctx, "default", asOf)
-	if err != nil {
-		err = fmt.Errorf("updateSchedulerLastRun: %w", err)
-	}
+func (m Manager) UpdateSchedulerLastRun(ctx context.Context, worker string, asOf time.Time) (err error) {
+	_, err = m.updateSchedulerLastRun.ExecContext(ctx, worker, asOf)
 	return
 }
 
@@ -319,13 +315,13 @@ WHERE
 	AND attempt < 5
 `, timerTableName)
 
-func (m Manager) UpdateTimers(ctx context.Context, now time.Time, minutesSinceLastUpdate int) (err error) {
+func (m Manager) UpdateTimers(ctx context.Context, worker string, now time.Time, minutesSinceLastUpdate int) (err error) {
 	if minutesSinceLastUpdate == 0 {
 		minutesSinceLastUpdate = 1
 	}
 	_, err = m.updateTimers.ExecContext(ctx, minutesSinceLastUpdate)
 	if err == nil {
-		err = m.UpdateSchedulerLastRun(ctx, now)
+		err = m.UpdateSchedulerLastRun(ctx, worker, now)
 	}
 	return
 }

@@ -17,8 +17,8 @@ var (
 // SchedulerLastRun holds singleton information about the schedulers
 // that is currently actively pushing timers forward.
 type SchedulerLastRun struct {
-	Name    string    `db:"name,pk"`
-	LastRun time.Time `db:"last_run"`
+	Worker     *string   `db:"worker"`
+	LastRunUTC time.Time `db:"last_run_utc"`
 }
 
 func (s SchedulerLastRun) TableName() string { return "scheduler_last_run" }
