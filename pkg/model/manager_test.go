@@ -137,7 +137,7 @@ func Test_Manager_UpdateTimers(t *testing.T) {
 	err = modelMgr.Invoke(ctx).Create(&t2)
 	assert.ItsNil(t, err)
 
-	err = modelMgr.UpdateTimers(ctx, time.Now().UTC(), 1)
+	err = modelMgr.UpdateTimers(ctx, "test-worker", time.Now().UTC(), 1)
 	assert.ItsNil(t, err)
 
 	var timers []Timer
@@ -214,7 +214,7 @@ func Test_Manager_UpdateTimers_multiMinuteUpdate(t *testing.T) {
 	err = modelMgr.Invoke(ctx).Create(&t2)
 	assert.ItsNil(t, err)
 
-	err = modelMgr.UpdateTimers(ctx, time.Now().UTC(), 5)
+	err = modelMgr.UpdateTimers(ctx, "test-worker", time.Now().UTC(), 5)
 	assert.ItsNil(t, err)
 
 	var timers []Timer

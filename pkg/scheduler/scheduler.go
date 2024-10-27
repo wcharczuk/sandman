@@ -257,7 +257,7 @@ func (s *Scheduler) processTick(ctx context.Context, now, lastUpdated time.Time)
 		s.vars.SchedulerUpdateElapsedMillis.Set(int64(elapsed / time.Millisecond))
 	}()
 	s.vars.SchedulerUpdateTicks.Add(1)
-	if err := s.mgr.UpdateTimers(ctx, now, int(now.Sub(lastUpdated).Minutes())); err != nil {
+	if err := s.mgr.UpdateTimers(ctx, s.identity, now, int(now.Sub(lastUpdated).Minutes())); err != nil {
 		s.vars.SchedulerUpdateTickErrors.Add(1)
 		log.GetLogger(ctx).Error("scheduler; failed to update timers", log.Any("err", err))
 	}

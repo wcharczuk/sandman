@@ -28,7 +28,7 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 				migration.NewGroupWithAction(
 					dbgen.TableFrom(
 						SchedulerLastRun{},
-						"INSERT INTO scheduler_last_run (last_run) VALUES (current_timestamp)",
+						"INSERT INTO scheduler_last_run (last_run_utc) VALUES (current_timestamp)",
 					),
 				),
 			),
