@@ -436,7 +436,7 @@ type TimerFailure struct {
 	DeliveredErr        string
 }
 
-func (m Manager) BulkUpdateTimerFailures(ctx context.Context, timerFailures []TimerFailure) error {
-	_, err = m.Invoke(ctx).Exec(`UPDATE timers SET timers.delivered_status_code = data.delivered_status_code, timers.delivered_err`, deliveredUTC, ids)
-	return nil
+func (m Manager) BulkUpdateTimerFailures(ctx context.Context, timerFailures []TimerFailure) (err error) {
+	// _, err = m.Invoke(ctx).Exec(`UPDATE timers SET timers.delivered_status_code = data.delivered_status_code, timers.delivered_err`, deliveredUTC, ids)
+	return
 }
