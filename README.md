@@ -38,9 +38,9 @@ To deliver the timer "hooks" we have a worker pool that can scale as needed, whe
 
 # Getting started
 
-1. Make sure prerequisites are installed
-  1a. See installing [CockroachDB locally]()
-  1b. Make sure that the [protobuf compiler]() is installed locally
+1. Make sure prerequisites are installed  
+  1a. See installing [CockroachDB locally](https://www.cockroachlabs.com/docs/v24.2/install-cockroachdb-mac)  
+  1b. Make sure that the [protobuf compiler](https://grpc.io/docs/protoc-installation/) is installed locally  
 2. Make sure protobuf plugins are installed:
 ```bash
 > make init
