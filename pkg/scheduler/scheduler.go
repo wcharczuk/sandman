@@ -120,7 +120,7 @@ func (s *Scheduler) stateIsUnknown(ctx context.Context) error {
 	s.state = SchedulerStateElection
 	var isLeader bool
 	var err error
-	s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, "default", s.identity, s.generation)
+	s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.identity, s.generation)
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (s *Scheduler) stateIsFollower(ctx context.Context) error {
 
 func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 	log.GetLogger(ctx).Info("scheduler; sending initial heartbeat", log.Any("state", s.state))
-	if err := s.mgr.SchedulerHeartbeat(ctx, "default", s.identity); err != nil {
+	if err := s.mgr.SchedulerHeartbeat(ctx, s.identity); err != nil {
 		return err
 	}
 
@@ -164,7 +164,7 @@ func (s *Scheduler) stateIsLeader(ctx context.Context) error {
 			lastUpdated = time.Now().UTC()
 		case <-heartbeatTick.C:
 			log.GetLogger(ctx).Info("scheduler; writing heartbeat", log.Any("state", s.state))
-			if err = s.mgr.SchedulerHeartbeat(ctx, "default", s.identity); err != nil {
+			if err = s.mgr.SchedulerHeartbeat(ctx, s.identity); err != nil {
 				return err
 			}
 		}
@@ -225,7 +225,7 @@ func (s *Scheduler) awaitNextElection(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			var isLeader bool
-			s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, "default", s.identity, s.generation+1)
+			s.generation, isLeader, err = s.mgr.SchedulerLeaderElection(ctx, s.identity, s.generation+1)
 			if err != nil {
 				return err
 			}

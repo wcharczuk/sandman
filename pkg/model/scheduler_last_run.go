@@ -17,7 +17,6 @@ var (
 // SchedulerLastRun holds singleton information about the schedulers
 // that is currently actively pushing timers forward.
 type SchedulerLastRun struct {
-	Name    string    `db:"name,pk"`
 	LastRun time.Time `db:"last_run"`
 }
 
