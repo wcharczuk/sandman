@@ -422,3 +422,23 @@ func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matc
 	_, err := m.Invoke(ctx).Exec(statement, args...)
 	return err
 }
+
+//
+// batch ops?
+//
+
+func (m Manager) BulkUpdateTimerSuccesses(ctx context.Context, deliveredUTC time.Time, ids []uuid.UUID) (err error) {
+	_, err = m.Invoke(ctx).Exec(`UPDATE timers SET delivered_utc = $1 WHERE id = ANY($2)`, deliveredUTC, ids)
+	return
+}
+
+type TimerFailure struct {
+	ID                  uuid.UUID
+	DeliveredStatusCode uint32
+	DeliveredErr        string
+}
+
+func (m Manager) BulkUpdateTimerFailures(ctx context.Context, timerFailures []TimerFailure) error {
+	_, err = m.Invoke(ctx).Exec(`UPDATE timers SET timers.delivered_status_code = data.delivered_status_code, timers.delivered_err`, deliveredUTC, ids)
+	return nil
+}
