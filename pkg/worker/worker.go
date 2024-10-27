@@ -120,7 +120,7 @@ func (w *Worker) parallelismOrDefault() int {
 	return defaultParallelism
 }
 
-const defaultBatchSize = 1000
+const defaultBatchSize = 255
 
 func (w *Worker) batchSizeOrDefault() int {
 	if w.batchSize > 0 {
@@ -156,7 +156,6 @@ func (w *Worker) processTick(ctx context.Context) {
 	if len(deliveredIDs) > 0 {
 		log.GetLogger(ctx).Info("worker; marking timers delivered",
 			log.Int("timers", len(deliveredIDs)),
-			log.Any("err", err),
 		)
 		if err := w.mgr.BulkUpdateTimerSuccesses(ctx, time.Now().UTC(), deliveredIDs); err != nil {
 			log.GetLogger(ctx).Error("worker; failed to mark timers delivered", log.Any("err", err))

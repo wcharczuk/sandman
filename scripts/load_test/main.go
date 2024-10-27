@@ -48,7 +48,7 @@ var command = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:  "hook-url",
-			Value: "http://localhost:8080",
+			Value: "http://localhost:8081",
 		},
 		&cli.StringFlag{
 			Name:  "hook-method",
