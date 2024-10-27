@@ -23,8 +23,10 @@ message Timer {
 	string id = 1;
 	string name = 2;
 	map<string,string> labels = 3;
-	google.protobuf.Timestamp created_utc = 4;
-	google.protobuf.Timestamp due_utc = 5;
+  uint32 priority = 4;
+
+	google.protobuf.Timestamp created_utc = 5;
+	google.protobuf.Timestamp due_utc = 6;
 
 	uint64 due_counter = 10;
 	uint32 retry_counter = 12;

@@ -24,4 +24,4 @@ migrate:
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run sandman-scheduler/main.go -db-migrate -start=false
 
 run:
-	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run dev/main.go
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run scripts/dev/main.go

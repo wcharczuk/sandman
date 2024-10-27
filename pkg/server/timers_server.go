@@ -47,6 +47,7 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	newTimer := model.Timer{
 		Name:        t.GetName(),
 		Labels:      t.GetLabels(),
+		Priority:    t.GetPriority(),
 		CreatedUTC:  nowUTC,
 		DueUTC:      dueUTC,
 		DueCounter:  minutesUntil(nowUTC, dueUTC),

@@ -15,9 +15,10 @@ var timerColumns = timerTypeMeta.Columns()
 
 // Timer is a promise in the future to deliver an RPC
 type Timer struct {
-	ID     uuid.UUID         `db:"id,pk,auto"`
-	Name   string            `db:"name"`
-	Labels map[string]string `db:"labels,json"`
+	ID       uuid.UUID         `db:"id,pk,auto"`
+	Name     string            `db:"name"`
+	Labels   map[string]string `db:"labels,json"`
+	Priority uint32            `db:"priority"`
 
 	CreatedUTC time.Time `db:"created_utc"`
 	DueUTC     time.Time `db:"due_utc"`

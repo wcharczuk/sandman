@@ -11,8 +11,10 @@ import (
 
 	"go.charczuk.com/sdk/async"
 	"go.charczuk.com/sdk/log"
+	"go.charczuk.com/sdk/uuid"
 
 	"sandman/pkg/model"
+	"sandman/pkg/utils"
 )
 
 // New returns a new worker.
@@ -138,7 +140,28 @@ func (w *Worker) processTick(ctx context.Context) {
 	for index := range timers {
 		b.Go(w.processTickTimer(ctx, &timers[index]))
 	}
-	b.Wait()
+
+	if err := b.Wait(); err != nil {
+		log.GetLogger(ctx).Error("worker; failed to process timers", log.Any("err", err))
+		return
+	}
+
+	var deliveredIDs []uuid.UUID
+	for index := range timers {
+		if timers[index].DeliveredUTC != nil && !timers[index].DeliveredUTC.IsZero() {
+			deliveredIDs = append(deliveredIDs, timers[index].ID)
+		}
+	}
+
+	if len(deliveredIDs) > 0 {
+		log.GetLogger(ctx).Info("worker; marking timers delivered",
+			log.Int("timers", len(deliveredIDs)),
+			log.Any("err", err),
+		)
+		if err := w.mgr.BulkUpdateTimerSuccesses(ctx, time.Now().UTC(), deliveredIDs); err != nil {
+			log.GetLogger(ctx).Error("worker; failed to mark timers delivered", log.Any("err", err))
+		}
+	}
 }
 
 func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() error {
@@ -182,20 +205,14 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 			}
 			return nil
 		}
-		internalErr = w.mgr.MarkDelivered(ctx, t.ID)
-		if internalErr != nil {
-			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark delivered: %w", internalErr), w.logAttrs(t,
-				log.String("err_type", "internal"),
-				log.Duration("elapsed", time.Since(started)),
-			)...)
-		}
-		log.GetLogger(ctx).Info("worker; delivery success", w.logAttrs(t,
-			log.Duration("elapsed", time.Since(started)),
-		)...)
+
+		// mark the timer as delivered
+		t.DeliveredUTC = utils.Ref(time.Now().UTC())
 		return nil
 	}
 }
 
+// makeHookRequest makes the underlying request to the hook url, with a 5 second timeout.
 func (w *Worker) makeHookRequest(t *model.Timer) (*http.Response, error) {
 	var body io.Reader
 	if rawBody := t.HookBody; len(rawBody) > 0 {

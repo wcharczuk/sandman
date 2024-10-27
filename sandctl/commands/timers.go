@@ -13,6 +13,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"go.charczuk.com/sdk/cliutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 )
@@ -43,15 +44,19 @@ func timerGenerate() *cli.Command {
 				Aliases:  []string{"n"},
 				Required: true,
 			},
+			&cli.StringMapFlag{
+				Name:    "label",
+				Aliases: []string{"l"},
+			},
+			&cli.UintFlag{
+				Name:    "priority",
+				Aliases: []string{"p"},
+			},
 			&cli.TimestampFlag{
 				Name: "due-utc",
 			},
 			&cli.DurationFlag{
 				Name: "due-in",
-			},
-			&cli.StringMapFlag{
-				Name:    "label",
-				Aliases: []string{"l"},
 			},
 			&cli.StringFlag{
 				Name:     "hook-url",
@@ -78,8 +83,9 @@ func timerGenerate() *cli.Command {
 				hookBodyData = base64.StdEncoding.EncodeToString(rawHookBodyData)
 			}
 			t := viewmodel.Timer{
-				Name:   cmd.String("name"),
-				Labels: cmd.StringMap("label"),
+				Name:     cmd.String("name"),
+				Labels:   cmd.StringMap("label"),
+				Priority: uint32(cmd.Uint("priority")),
 				Hook: viewmodel.Hook{
 					URL:     cmd.String("hook-url"),
 					Method:  cmd.String("hook-method"),
@@ -133,7 +139,7 @@ func timerCreate() *cli.Command {
 func createClient(cmd *cli.Command) (v1.TimersClient, error) {
 	addr := cmd.String("address")
 	authority := cmd.String("authority")
-	c, err := grpc.NewClient(addr, grpc.WithAuthority(authority), grpc.WithInsecure())
+	c, err := grpc.NewClient(addr, grpc.WithAuthority(authority), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
