@@ -28,7 +28,7 @@ Typical implementations of calendarized event tables use indexes and timestamps 
 
 `sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due. 
 
-For example, if you have a timer that is due in 2 years, you would put (2*365*24*60 == 1,051,200 minutes) as the counter value, and it would be decremented each cycle for 2 years. 
+For example, if you have a timer that is due in 2 years, you would put (2 x 365 x 24 x 60 == 1,051,200 minutes) as the counter value, and it would be decremented each cycle for 2 years. 
 
 In practice, a scheduler pool picks a leader, and then that leader every minute runs a very simple update command on the entire database to decrement counters. This sounds expensive, but remember that we can scale CockroachDB horizontally to make this update command relatively performant. We do this by splitting the timer table up across N nodes, where each node has some subset of the total timers. When we run the update, each node runs the update on its subset of data, and if we need to handle more timers, we simply add more nodes. 
 
