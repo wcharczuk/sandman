@@ -35,25 +35,33 @@ In practice, a scheduler pool picks a leader, and then that leader every minute 
 
 Similarly, to detect if timers are "due" we simply do a select on each node for timers with counter==0, which in practice scans the table for rows that match the predicate, again leaning on the idea that we can add more nodes to make this efficient if necessary.
 
+To make sure that we select timers "fairly" we compute a shard from a shard key for each timer, then for each fetch of timers we weight a given shard randomly based on the given minute and second the worker is scanning for work on. This in essence distributes the shard keys into 3600 (60 minutes * 60 seconds) "shards" randomly, allowing "hot" shard keys to burden different shards for each pass.
+
 To deliver the timer "hooks" we have a worker pool that can scale as needed, where each worker pool every 10 seconds scans for new work, and attempts to deliver the hooks in parallel.
 
 # Getting started
 
-1. Make sure prerequisites are installed
+1. Make sure prerequisites are installed:
+
   1a. See installing [CockroachDB locally](https://www.cockroachlabs.com/docs/v24.2/install-cockroachdb-mac)
+
   1b. Make sure that the [protobuf compiler](https://grpc.io/docs/protoc-installation/) is installed locally
+
 2. Make sure protobuf plugins are installed:
 ```bash
 > make init
 ```
+
 3. Create the underlying database and run migrations
 ```bash
 > make db
 ```
+
 4. Install the management cli (`sandctl`)
 ```bash
 > go install sandman/sandctl
 ```
+
 5. Start the local cluster
 ```bash
 > make run
