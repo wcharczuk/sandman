@@ -48,6 +48,7 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 		Name:        t.GetName(),
 		Labels:      t.GetLabels(),
 		Priority:    t.GetPriority(),
+		ShardKey:    t.GetShardKey(),
 		CreatedUTC:  nowUTC,
 		DueUTC:      dueUTC,
 		DueCounter:  minutesUntil(nowUTC, dueUTC),

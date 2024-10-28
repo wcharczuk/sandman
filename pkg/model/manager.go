@@ -21,15 +21,16 @@ type Manager struct {
 	getSchedulerLastRun      *sql.Stmt
 	updateSchedulerLastRun   *sql.Stmt
 
-	getDueTimers        *sql.Stmt
-	getTimerByName      *sql.Stmt
-	getTimersDueBetween *sql.Stmt
-	updateTimers        *sql.Stmt
-	cullTimers          *sql.Stmt
-	markDelivered       *sql.Stmt
-	markAttempted       *sql.Stmt
-	deleteTimerByID     *sql.Stmt
-	deleteTimerByName   *sql.Stmt
+	getDueTimers             *sql.Stmt
+	getTimerByName           *sql.Stmt
+	getTimersDueBetween      *sql.Stmt
+	updateTimers             *sql.Stmt
+	cullTimers               *sql.Stmt
+	markDelivered            *sql.Stmt
+	markAttempted            *sql.Stmt
+	deleteTimerByID          *sql.Stmt
+	deleteTimerByName        *sql.Stmt
+	bulkUpdateTimerSuccesses *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
@@ -99,6 +100,11 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		err = fmt.Errorf("deleteTimerByName: %w", err)
 		return
 	}
+	m.bulkUpdateTimerSuccesses, err = m.Invoke(ctx).Prepare(execBulkUpdateTimerSuccesses)
+	if err != nil {
+		err = fmt.Errorf("bulkUpdateTimerSuccesses: %w", err)
+		return
+	}
 	return
 }
 
@@ -140,6 +146,9 @@ func (m Manager) Close() error {
 		return err
 	}
 	if err := m.updateTimers.Close(); err != nil {
+		return err
+	}
+	if err := m.bulkUpdateTimerSuccesses.Close(); err != nil {
 		return err
 	}
 	return nil
@@ -423,10 +432,12 @@ func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matc
 }
 
 //
-// batch ops?
+// batch ops
 //
 
+const execBulkUpdateTimerSuccesses = `UPDATE timers SET delivered_utc = $1 WHERE id = ANY($2)`
+
 func (m Manager) BulkUpdateTimerSuccesses(ctx context.Context, deliveredUTC time.Time, ids []uuid.UUID) (err error) {
-	_, err = m.Invoke(ctx).Exec(`UPDATE timers SET delivered_utc = $1 WHERE id = ANY($2)`, deliveredUTC, ids)
+	_, err = m.bulkUpdateTimerSuccesses.ExecContext(ctx, deliveredUTC, ids)
 	return
 }

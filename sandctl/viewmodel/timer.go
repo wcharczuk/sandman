@@ -13,6 +13,7 @@ type Timer struct {
 	Name     string            `yaml:"name"`
 	Labels   map[string]string `yaml:"labels,omitempty"`
 	Priority uint32            `yaml:"priority"`
+	ShardKey string            `yaml:"shard_key"`
 	DueUTC   time.Time         `yaml:"due_utc"`
 	Hook     Hook              `yaml:"hook"`
 }
@@ -23,6 +24,7 @@ func (t Timer) ToProto() *v1.Timer {
 		Name:        t.Name,
 		Labels:      t.Labels,
 		Priority:    t.Priority,
+		ShardKey:    t.ShardKey,
 		DueUtc:      timestamppb.New(t.DueUTC),
 		HookUrl:     t.Hook.URL,
 		HookMethod:  t.Hook.Method,
