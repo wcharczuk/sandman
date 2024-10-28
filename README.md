@@ -34,6 +34,8 @@ Similarly, as the database becomes loaded, additional replicas can be added to d
 
 The idea here is by keeping the table simple, and keeping inserts fast and leaning on horizontal scale for polling and delivery, we can scale the system as needed to handle load.
 
+Additionally, timers have `shard_key` fields to provide a mechanism to distribute timers "fairly" based on shard assignment. The way this works in practice is when workers poll for timers, they order by the user-supplied priority on the timer, and add a "boost" priority based on the shard key assignment within 3600 buckets (i.e. seconds within the hour). This has the effect of randomizing the polling order and cutoff for which timers are fetched for each due period, keeping "hot" shards from hogging the delivery capacity.
+
 # Getting started
 
 1. Make sure prerequisites are installed:
