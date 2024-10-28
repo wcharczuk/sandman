@@ -12,6 +12,7 @@ import (
 	"go.charczuk.com/sdk/apputil"
 	"go.charczuk.com/sdk/db"
 	"go.charczuk.com/sdk/db/dbutil"
+	"go.charczuk.com/sdk/db/migration"
 	"go.charczuk.com/sdk/log"
 	"go.charczuk.com/sdk/slant"
 )
@@ -28,7 +29,9 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		return nil
 	},
 	Migrate: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
-		return nil
+		return model.Migrations(
+			migration.OptLog(log.GetLogger(ctx)),
+		).Apply(ctx, dbc)
 	},
 	Start: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
 		slant.Print(os.Stdout, "sandman-worker")

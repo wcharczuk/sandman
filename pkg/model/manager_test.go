@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"sandman/pkg/utils"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"go.charczuk.com/sdk/uuid"
 )
 
-func Test_Manager_GetDueTimers(t *testing.T) {
+func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
 	assert.ItsNil(t, err)
@@ -40,8 +41,10 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
 	})
 	assert.ItsNil(t, err)
+
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:   "test-timer-01",
 		DueUTC: now.Add(2 * time.Hour),
@@ -51,11 +54,26 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
 	})
 	assert.ItsNil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:   "test-timer-02",
+		DueUTC: now.Add(2 * time.Hour),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+		Attempt:    5,
+	})
+	assert.ItsNil(t, err)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:   "test-timer-03",
 		DueUTC: now.Add(4 * time.Hour),
 		Labels: map[string]string{
 			"service": "test-service",
@@ -63,15 +81,364 @@ func Test_Manager_GetDueTimers(t *testing.T) {
 			"region":  "us-east-1",
 		},
 		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
 	})
 	assert.ItsNil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now, 10)
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 2, len(timers))
 }
 
-func Test_Manager_BulkUpdateTimerSuccesses(t *testing.T) {
+func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:             "test-timer-00",
+		DueUTC:           now,
+		AssignedUntilUTC: utils.Ref(now.Add(time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+	})
+	assert.ItsNil(t, err)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:             "test-timer-01",
+		DueUTC:           now,
+		AssignedUntilUTC: utils.Ref(now.Add(2 * time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+	})
+	assert.ItsNil(t, err)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:             "test-timer-02",
+		DueUTC:           now,
+		AssignedUntilUTC: utils.Ref(now.Add(2 * time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+		Attempt:    5,
+	})
+	assert.ItsNil(t, err)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:             "test-timer-03",
+		DueUTC:           now,
+		AssignedUntilUTC: utils.Ref(now.Add(4 * time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+	})
+	assert.ItsNil(t, err)
+
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, 2, len(timers))
+}
+
+func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:     "test-timer-00",
+		DueUTC:   now,
+		RetryUTC: utils.Ref(now.Add(time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+	})
+	assert.ItsNil(t, err)
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:     "test-timer-01",
+		DueUTC:   now,
+		RetryUTC: utils.Ref(now.Add(2 * time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+	})
+	assert.ItsNil(t, err)
+
+	err = modelMgr.Invoke(ctx).Create(&Timer{
+		Name:     "test-timer-02",
+		DueUTC:   now,
+		RetryUTC: utils.Ref(now.Add(4 * time.Hour)),
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+	})
+	assert.ItsNil(t, err)
+
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, 2, len(timers))
+}
+
+func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
+
+	t00 := Timer{
+		Name:   "test-timer-00",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t00)
+	assert.ItsNil(t, err)
+
+	t01 := Timer{
+		Name:   "test-timer-01",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t01)
+	assert.ItsNil(t, err)
+
+	t02 := Timer{
+		Name:   "test-timer-02",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_also_not_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t02)
+	assert.ItsNil(t, err)
+
+	t03 := Timer{
+		Name:   "test-timer-03",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_aswell_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t03)
+	assert.ItsNil(t, err)
+
+	t04 := Timer{
+		Name:   "test-timer-04",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_sortof_aswell_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t04)
+	assert.ItsNil(t, err)
+
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 3)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, 3, len(timers))
+
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t00.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t04.ID) })
+}
+
+func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
+
+	t00 := Timer{
+		Name:   "test-timer-00",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t00)
+	assert.ItsNil(t, err)
+
+	t01 := Timer{
+		Name:   "test-timer-01",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t01)
+	assert.ItsNil(t, err)
+
+	t02 := Timer{
+		Name:   "test-timer-02",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_also_not_bufoco")),
+		Priority:   10000,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t02)
+	assert.ItsNil(t, err)
+
+	t03 := Timer{
+		Name:   "test-timer-03",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_aswell_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t03)
+	assert.ItsNil(t, err)
+
+	t04 := Timer{
+		Name:   "test-timer-04",
+		DueUTC: now,
+		Labels: map[string]string{
+			"service": "test-service",
+			"env":     "prod",
+			"region":  "us-east-1",
+		},
+		CreatedUTC: now,
+		Shard:      StableHash([]byte("uk_not_sortof_aswell_bufoco")),
+		Priority:   10,
+	}
+	err = modelMgr.Invoke(ctx).Create(&t04)
+	assert.ItsNil(t, err)
+
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 3)
+	assert.ItsNil(t, err)
+	assert.ItsEqual(t, 3, len(timers))
+
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t04.ID) })
+}
+
+func Test_Manager_BulkMarkDelivered(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
 	assert.ItsNil(t, err)
@@ -118,7 +485,7 @@ func Test_Manager_BulkUpdateTimerSuccesses(t *testing.T) {
 		timers[45].ID,
 	}
 
-	err = modelMgr.BulkUpdateTimerSuccesses(ctx, now.Add(time.Hour), ids)
+	err = modelMgr.BulkMarkDelivered(ctx, now.Add(time.Hour), ids)
 	assert.ItsNil(t, err)
 
 	var verifyTimers []Timer

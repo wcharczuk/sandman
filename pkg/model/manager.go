@@ -16,15 +16,14 @@ import (
 type Manager struct {
 	dbutil.BaseManager
 
-	getDueTimers             *sql.Stmt
-	getTimerByName           *sql.Stmt
-	getTimersDueBetween      *sql.Stmt
-	cullTimers               *sql.Stmt
-	markDelivered            *sql.Stmt
-	markAttempted            *sql.Stmt
-	deleteTimerByID          *sql.Stmt
-	deleteTimerByName        *sql.Stmt
-	bulkUpdateTimerSuccesses *sql.Stmt
+	getDueTimers        *sql.Stmt
+	getTimerByName      *sql.Stmt
+	getTimersDueBetween *sql.Stmt
+	cullTimers          *sql.Stmt
+	markAttempted       *sql.Stmt
+	deleteTimerByID     *sql.Stmt
+	deleteTimerByName   *sql.Stmt
+	bulkMarkDelivered   *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
@@ -48,11 +47,6 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		err = fmt.Errorf("cullTimers: %w", err)
 		return
 	}
-	m.markDelivered, err = m.Invoke(ctx).Prepare(execMarkDelivered)
-	if err != nil {
-		err = fmt.Errorf("markDelivered: %w", err)
-		return
-	}
 	m.markAttempted, err = m.Invoke(ctx).Prepare(execMarkAttempted)
 	if err != nil {
 		err = fmt.Errorf("markAttempted: %w", err)
@@ -68,9 +62,9 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		err = fmt.Errorf("deleteTimerByName: %w", err)
 		return
 	}
-	m.bulkUpdateTimerSuccesses, err = m.Invoke(ctx).Prepare(execBulkUpdateTimerSuccesses)
+	m.bulkMarkDelivered, err = m.Invoke(ctx).Prepare(execBulkMarkDelivered)
 	if err != nil {
-		err = fmt.Errorf("bulkUpdateTimerSuccesses: %w", err)
+		err = fmt.Errorf("bulkMarkDelivered: %w", err)
 		return
 	}
 	return
@@ -98,10 +92,7 @@ func (m Manager) Close() error {
 	if err := m.markAttempted.Close(); err != nil {
 		return err
 	}
-	if err := m.markDelivered.Close(); err != nil {
-		return err
-	}
-	if err := m.bulkUpdateTimerSuccesses.Close(); err != nil {
+	if err := m.bulkMarkDelivered.Close(); err != nil {
 		return err
 	}
 	return nil
@@ -156,7 +147,8 @@ var queryGetDueTimers = fmt.Sprintf(`UPDATE %[1]s
 SET 
 	assigned_worker = $1
 	, attempt = attempt + 1
-	, retry_counter = 5
+	, assigned_until_utc = $2::timestamp + interval '1 minute'
+	, retry_utc = $2 + interval '5 minutes'
 WHERE
 	id in (
 		SELECT 
@@ -164,21 +156,25 @@ WHERE
 		FROM
 			%[1]s
 		WHERE
-			(
-				due_utc < $2
-				OR assigned_until < $2
-				OR retry_utc < $2
+			due_utc < $2 
+			AND (
+				assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2) 
+			)
+			AND (
+				retry_utc IS NULL OR (retry_utc IS NOT NULL AND retry_utc < $2) 
 			)
 			AND attempt < 5
 			AND delivered_utc IS NULL
 		ORDER BY 
-			priority
+			priority + (MOD(shard, cast(extract('minute', $2::timestamp) * extract('second', $2::timestamp) as BIGINT)) * 100)
 		DESC
 		LIMIT $3
 		FOR UPDATE SKIP LOCKED
 )
 RETURNING %[2]s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
+
+//
 
 func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int) (output []Timer, err error) {
 	var rows *sql.Rows
@@ -207,35 +203,23 @@ func (m Manager) CullTimers(ctx context.Context, cutoff time.Time) (err error) {
 	return
 }
 
-var execMarkDelivered = fmt.Sprintf(`UPDATE %s 
-SET 
-	delivered_utc = current_timestamp
-WHERE 
-	id = $1
-`, timerTableName)
-
-func (m Manager) MarkDelivered(ctx context.Context, id uuid.UUID) (err error) {
-	_, err = m.markDelivered.ExecContext(ctx, id)
-	return
-}
-
 var execMarkAttempted = fmt.Sprintf(`UPDATE %s 
 SET 
 	delivered_status_code = $2
 	, delivered_err = $3
-	, retry_counter = 5
-	, attempt_counter = 0
+	, retry_utc = $4::timestamp + interval '5 minutes'
+	, assigned_until_utc = NULL
 WHERE 
 	id = $1
 	AND attempt < 5
 `, timerTableName)
 
-func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatus uint32, deliveredErr error) (err error) {
+func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatus uint32, deliveredErr error, asOf time.Time) (err error) {
 	var deliveredErrString string
 	if deliveredErr != nil {
 		deliveredErrString = deliveredErr.Error()
 	}
-	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErrString)
+	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErrString, asOf)
 	return
 }
 
@@ -293,9 +277,9 @@ func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matc
 // batch ops
 //
 
-const execBulkUpdateTimerSuccesses = `UPDATE timers SET delivered_utc = $1 WHERE id = ANY($2)`
+const execBulkMarkDelivered = `UPDATE timers SET delivered_utc = $1 WHERE id = ANY($2)`
 
-func (m Manager) BulkUpdateTimerSuccesses(ctx context.Context, deliveredUTC time.Time, ids []uuid.UUID) (err error) {
-	_, err = m.bulkUpdateTimerSuccesses.ExecContext(ctx, deliveredUTC, ids)
+func (m Manager) BulkMarkDelivered(ctx context.Context, deliveredUTC time.Time, ids []uuid.UUID) (err error) {
+	_, err = m.bulkMarkDelivered.ExecContext(ctx, deliveredUTC, ids)
 	return
 }

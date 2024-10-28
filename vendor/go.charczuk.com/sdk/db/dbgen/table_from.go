@@ -91,13 +91,9 @@ func dbTypeForFieldType(t reflect.Type) string {
 		return "BOOLEAN"
 	case reflect.String:
 		return "TEXT"
-	case reflect.Int32:
+	case reflect.Uint8, reflect.Int8:
 		return "INT"
-	case reflect.Int, reflect.Int64:
-		return "BIGINT"
-	case reflect.Uint32:
-		return "INT"
-	case reflect.Uint, reflect.Uint64:
+	case reflect.Int32, reflect.Int, reflect.Int64, reflect.Uint32, reflect.Uint, reflect.Uint64:
 		return "BIGINT"
 	case reflect.Float32:
 		return "REAL"

@@ -7,7 +7,7 @@ import (
 
 // StableHash implements the default hash function with
 // a stable crc64 table checksum.
-func StableHash(data []byte) uint64 {
+func StableHash(data []byte) uint32 {
 	hash := md5.Sum(data)
-	return binary.BigEndian.Uint64(hash[8:])
+	return binary.BigEndian.Uint32(hash[4:])
 }

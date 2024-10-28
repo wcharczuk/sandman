@@ -44,7 +44,7 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	nowUTC := time.Now().UTC()
 	dueUTC := t.GetDueUtc().AsTime()
 
-	var shard uint64
+	var shard uint32
 	if shardKey := t.GetShardKey(); shardKey != "" {
 		shard = model.StableHash([]byte(shardKey))
 	}

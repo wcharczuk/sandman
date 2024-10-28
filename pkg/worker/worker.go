@@ -158,7 +158,7 @@ func (w *Worker) processTick(ctx context.Context) {
 		log.GetLogger(ctx).Info("worker; marking timers delivered",
 			log.Int("timers", len(deliveredIDs)),
 		)
-		if err := w.mgr.BulkUpdateTimerSuccesses(ctx, time.Now().UTC(), deliveredIDs); err != nil {
+		if err := w.mgr.BulkMarkDelivered(ctx, time.Now().UTC(), deliveredIDs); err != nil {
 			log.GetLogger(ctx).Error("worker; failed to mark timers delivered", log.Any("err", err))
 		}
 	}
@@ -196,7 +196,7 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 					log.Duration("elapsed", time.Since(started)),
 				)...)
 			}
-			internalErr = w.mgr.MarkAttempted(ctx, t.ID, uint32(statusCode), remoteErr)
+			internalErr = w.mgr.MarkAttempted(ctx, t.ID, uint32(statusCode), remoteErr, time.Now().UTC())
 			if internalErr != nil {
 				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark attempted: %w", internalErr), w.logAttrs(t,
 					log.String("err_type", "internal"),
