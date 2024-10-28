@@ -1,9 +1,9 @@
 ```
                              __
-    _____ ____ _ ____   ____/ /____ ___   ____ _ ____ 
+    _____ ____ _ ____   ____/ /____ ___   ____ _ ____
    / ___// __ `// __ \ / __  // __ `__ \ / __ `// __ \
   (__  )/ /_/ // / / // /_/ // / / / / // /_/ // / / /
- /____/ \__,_//_/ /_/ \__,_//_/ /_/ /_/ \__,_//_/ /_/ 
+ /____/ \__,_//_/ /_/ \__,_//_/ /_/ /_/ \__,_//_/ /_/
 ```
 
 `sandman` is a an experimental "timer" orchestrator.
@@ -22,15 +22,16 @@ The design goals with `sandman` are as follows:
 
 `sandman` leans on two basic concepts to achieve scale
 - [Hashed and hierarchical timing wheels](https://dl.acm.org/doi/10.1145/41457.37504) to structure the timers
+- [Shuffle Sharding](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/) to distribute timers fairly
 - [CockroachDB](https://www.cockroachlabs.com/) to scale the database layer horizontally
 
 Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because table indexes need to be updated for each timer inserted.
 
-`sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due. 
+`sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due.
 
-For example, if you have a timer that is due in 2 years, you would put (2 x 365 x 24 x 60 == 1,051,200 minutes) as the counter value, and it would be decremented each cycle for 2 years. 
+For example, if you have a timer that is due in 2 years, you would put (2 x 365 x 24 x 60 == 1,051,200 minutes) as the counter value, and it would be decremented each cycle for 2 years.
 
-In practice, a scheduler pool picks a leader, and then that leader every minute runs a very simple update command on the entire database to decrement counters. This sounds expensive, but remember that we can scale CockroachDB horizontally to make this update command relatively performant. We do this by splitting the timer table up across N nodes, where each node has some subset of the total timers. When we run the update, each node runs the update on its subset of data, and if we need to handle more timers, we simply add more nodes. 
+In practice, a scheduler pool picks a leader, and then that leader every minute runs a very simple update command on the entire database to decrement counters. This sounds expensive, but remember that we can scale CockroachDB horizontally to make this update command relatively performant. We do this by splitting the timer table up across N nodes, where each node has some subset of the total timers. When we run the update, each node runs the update on its subset of data, and if we need to handle more timers, we simply add more nodes.
 
 Similarly, to detect if timers are "due" we simply do a select on each node for timers with counter==0, which in practice scans the table for rows that match the predicate, again leaning on the idea that we can add more nodes to make this efficient if necessary.
 
@@ -38,9 +39,9 @@ To deliver the timer "hooks" we have a worker pool that can scale as needed, whe
 
 # Getting started
 
-1. Make sure prerequisites are installed  
-  1a. See installing [CockroachDB locally](https://www.cockroachlabs.com/docs/v24.2/install-cockroachdb-mac)  
-  1b. Make sure that the [protobuf compiler](https://grpc.io/docs/protoc-installation/) is installed locally  
+1. Make sure prerequisites are installed
+  1a. See installing [CockroachDB locally](https://www.cockroachlabs.com/docs/v24.2/install-cockroachdb-mac)
+  1b. Make sure that the [protobuf compiler](https://grpc.io/docs/protoc-installation/) is installed locally
 2. Make sure protobuf plugins are installed:
 ```bash
 > make init

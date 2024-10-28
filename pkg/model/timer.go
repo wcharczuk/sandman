@@ -20,6 +20,7 @@ type Timer struct {
 	Labels   map[string]string `db:"labels,json"`
 	Priority uint32            `db:"priority"`
 	ShardKey string            `db:"shard_key"`
+	Shard    uint64            `db:"shard"`
 
 	CreatedUTC time.Time `db:"created_utc"`
 	DueUTC     time.Time `db:"due_utc"`

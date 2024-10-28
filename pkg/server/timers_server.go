@@ -44,11 +44,17 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	nowUTC := time.Now().UTC()
 	dueUTC := t.GetDueUtc().AsTime()
 
+	var shard uint64
+	if shardKey := t.GetShardKey(); shardKey != "" {
+		shard = model.StableHash([]byte(shardKey))
+	}
+
 	newTimer := model.Timer{
 		Name:        t.GetName(),
 		Labels:      t.GetLabels(),
 		Priority:    t.GetPriority(),
 		ShardKey:    t.GetShardKey(),
+		Shard:       shard,
 		CreatedUTC:  nowUTC,
 		DueUTC:      dueUTC,
 		DueCounter:  minutesUntil(nowUTC, dueUTC),
