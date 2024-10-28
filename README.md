@@ -24,6 +24,16 @@ The design goals with `sandman` are as follows:
 - [Shuffle Sharding](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/) to distribute timers fairly
 - [CockroachDB](https://www.cockroachlabs.com/) to scale the database layer horizontally
 
+When a timer is created, it gets inserted into one big table, the `timers` table, with a `due_utc` value. The `timers` table has no indexes outside a unique key for the user supplied "name" field.
+
+From here, workers poll the table every 10 seconds, pulling 255 "due" timers per poll. These timers are sent via. their "hook" details with 5 second timeouts.
+
+Workers can be added as needed to scale for timer due spikes, as they cooperatively mark subsets of the `timers` table for assignment.
+
+Similarly, as the database becomes loaded, additional replicas can be added to distribute shares of the `timers` table to new nodes such that the table scans for the polls do not exceed some nominal thresholds.
+
+The idea here is by keeping the table simple, and keeping inserts fast and leaning on horizontal scale for polling and delivery, we can scale the system as needed to handle load.
+
 # Getting started
 
 1. Make sure prerequisites are installed:

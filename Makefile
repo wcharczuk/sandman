@@ -24,3 +24,9 @@ migrate:
 
 run:
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run scripts/dev/main.go
+
+run-worker-00:
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml EXPVAR_BIND_ADDR=:8082 HOSTNAME=worker-00 go run sandman-worker/main.go
+
+run-worker-01:
+	@CONFIG_PATH=$(PREFIX)/_config/config.yml EXPVAR_BIND_ADDR=:8083 HOSTNAME=worker-00 go run sandman-worker/main.go

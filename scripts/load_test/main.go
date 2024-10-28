@@ -93,6 +93,7 @@ var command = &cli.Command{
 		}
 		for x := 0; x < count; x++ {
 			timer.Name = uuid.V4().String()
+			timer.ShardKey = fmt.Sprintf("uid_%04d", x)
 			_, err := c.CreateTimer(ctx, timer.ToProto())
 			if err != nil {
 				return fmt.Errorf("load test; create timer failed: %w", err)

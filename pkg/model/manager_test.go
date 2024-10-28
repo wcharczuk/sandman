@@ -350,13 +350,13 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 3, len(timers))
 
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t00.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t04.ID) })
 
-	assert.ItsEqual(t, t03.ID, pseudoPriorities[0].ID)
-	assert.ItsEqual(t, t04.ID, pseudoPriorities[1].ID)
-	assert.ItsEqual(t, t00.ID, pseudoPriorities[2].ID)
+	assert.ItsEqual(t, t01.ID, pseudoPriorities[0].ID)
+	assert.ItsEqual(t, t02.ID, pseudoPriorities[2].ID)
+	assert.ItsEqual(t, t03.ID, pseudoPriorities[1].ID)
 }
 
 type pseudoPriority struct {
@@ -367,7 +367,15 @@ type pseudoPriority struct {
 func computePseudoPriority(asOf time.Time, t *Timer) (output pseudoPriority) {
 	output.ID = t.ID
 	output.Priority += t.Priority
-	shardWeight := t.Shard % (uint32(asOf.Minute()) * uint32(asOf.Second()))
+
+	// the idea here is we split each hour into 60 minutes and 60 seconds
+	// for 3600 total shards.
+	// we then assign the shard to a "bucket" based on the current minute and second, and offset
+	// the bucket by the shard assignment onto 3600.
+	// we then multiply by 100 giving us 0 -> 36,0000 possible "boost" to
+	// the priority based on the shuffle shard
+	bucket := uint32(asOf.Minute()) * uint32(asOf.Second())
+	shardWeight := ((t.Shard % 3600) + bucket) % 3600
 	output.Priority += shardWeight * 100
 	return
 }
@@ -430,7 +438,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		},
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_also_not_bufoco")),
-		Priority:   10000,
+		Priority:   400000, // this means it's beyond the 360,000 maximum boost of shuffling
 	}
 	err = modelMgr.Invoke(ctx).Create(&t02)
 	assert.ItsNil(t, err)
@@ -469,9 +477,9 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 3, len(timers))
 
+	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t04.ID) })
 }
 
 func Test_Manager_BulkMarkDelivered(t *testing.T) {

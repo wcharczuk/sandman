@@ -166,7 +166,12 @@ WHERE
 			AND attempt < 5
 			AND delivered_utc IS NULL
 		ORDER BY 
-			priority + (MOD(shard, cast(extract('minute', $2::timestamp) * extract('second', $2::timestamp) as BIGINT)) * 100)
+			priority + (
+				(
+					MOD(shard, 3600) + cast(extract('minute', $2::timestamp) * extract('second', $2::timestamp) as BIGINT)
+				)
+				* 100
+			)
 		DESC
 		LIMIT $3
 		FOR UPDATE SKIP LOCKED
