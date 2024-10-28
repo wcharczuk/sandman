@@ -42,8 +42,8 @@ Let's imagine we use the default settings (255 timers per poll, 255 timer parall
 
 We can then factor the number of workers we'd need for specific situations as follows:
 - Per "minute" per worker throughput: 255 * (60/5) = 3060 per minute
-- if we need to send e.g. 1mm per minute, we'd need ~326 workers
-- we can squeeze that down if a worker can handle sending 1000 hooks at once, in which case we'd only need 83 workers
+- if we need to send e.g. 1mm per minute, we'd need **~326 workers**
+- we can squeeze that down if a worker can handle sending 1000 hooks at once, in which case we'd only need **83 workers**
 
 # Getting started
 
