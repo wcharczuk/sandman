@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sandman/pkg/utils"
+	"slices"
 	"testing"
 	"time"
 
@@ -327,13 +328,48 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 	err = modelMgr.Invoke(ctx).Create(&t04)
 	assert.ItsNil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 3)
+	asOf := now.Add(3 * time.Hour)
+	pseudoPriorities := []pseudoPriority{
+		computePseudoPriority(asOf, &t00),
+		computePseudoPriority(asOf, &t01),
+		computePseudoPriority(asOf, &t02),
+		computePseudoPriority(asOf, &t03),
+		computePseudoPriority(asOf, &t04),
+	}
+
+	slices.SortFunc(pseudoPriorities, func(i, j pseudoPriority) int {
+		if i.Priority < j.Priority {
+			return 1
+		} else if i.Priority == j.Priority {
+			return 0
+		}
+		return -1
+	})
+
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", asOf, 3)
 	assert.ItsNil(t, err)
 	assert.ItsEqual(t, 3, len(timers))
 
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t00.ID) })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
 	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t04.ID) })
+
+	assert.ItsEqual(t, t03.ID, pseudoPriorities[0].ID)
+	assert.ItsEqual(t, t04.ID, pseudoPriorities[1].ID)
+	assert.ItsEqual(t, t00.ID, pseudoPriorities[2].ID)
+}
+
+type pseudoPriority struct {
+	ID       uuid.UUID
+	Priority uint32
+}
+
+func computePseudoPriority(asOf time.Time, t *Timer) (output pseudoPriority) {
+	output.ID = t.ID
+	output.Priority += t.Priority
+	shardWeight := t.Shard % (uint32(asOf.Minute()) * uint32(asOf.Second()))
+	output.Priority += shardWeight * 100
+	return
 }
 
 func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
