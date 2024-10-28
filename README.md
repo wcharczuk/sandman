@@ -21,23 +21,8 @@ The design goals with `sandman` are as follows:
 # General Approach
 
 `sandman` leans on two basic concepts to achieve scale
-- [Hashed and hierarchical timing wheels](https://dl.acm.org/doi/10.1145/41457.37504) to structure the timers
 - [Shuffle Sharding](https://aws.amazon.com/builders-library/workload-isolation-using-shuffle-sharding/) to distribute timers fairly
 - [CockroachDB](https://www.cockroachlabs.com/) to scale the database layer horizontally
-
-Typical implementations of calendarized event tables use indexes and timestamps to organize the data in a way that can be filtered quickly. This can work well in practice for even large counts of timers, but as the table(s) that back these timers grows it gets slower and slower to insert new timers because table indexes need to be updated for each timer inserted.
-
-`sandman` echews indexed timestamps, and instead uses "counter" fields that are updated every minute by a scheduler process which represent the minutes until the timer is due.
-
-For example, if you have a timer that is due in 2 years, you would put (2 x 365 x 24 x 60 == 1,051,200 minutes) as the counter value, and it would be decremented each cycle for 2 years.
-
-In practice, a scheduler pool picks a leader, and then that leader every minute runs a very simple update command on the entire database to decrement counters. This sounds expensive, but remember that we can scale CockroachDB horizontally to make this update command relatively performant. We do this by splitting the timer table up across N nodes, where each node has some subset of the total timers. When we run the update, each node runs the update on its subset of data, and if we need to handle more timers, we simply add more nodes.
-
-Similarly, to detect if timers are "due" we simply do a select on each node for timers with counter==0, which in practice scans the table for rows that match the predicate, again leaning on the idea that we can add more nodes to make this efficient if necessary.
-
-To make sure that we select timers "fairly" we compute a shard from a shard key for each timer, then for each fetch of timers we weight a given shard randomly based on the given minute and second the worker is scanning for work on. This in essence distributes the shard keys into 3600 (60 minutes * 60 seconds) "shards" randomly, allowing "hot" shard keys to burden different shards for each pass.
-
-To deliver the timer "hooks" we have a worker pool that can scale as needed, where each worker pool every 10 seconds scans for new work, and attempts to deliver the hooks in parallel.
 
 # Getting started
 

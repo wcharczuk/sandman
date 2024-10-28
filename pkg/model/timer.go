@@ -22,12 +22,11 @@ type Timer struct {
 	ShardKey string            `db:"shard_key"`
 	Shard    uint64            `db:"shard"`
 
-	CreatedUTC time.Time `db:"created_utc"`
-	DueUTC     time.Time `db:"due_utc"`
+	CreatedUTC       time.Time  `db:"created_utc"`
+	DueUTC           time.Time  `db:"due_utc"`
+	AssignedUntilUTC *time.Time `db:"assigned_until_utc"`
+	RetryUTC         *time.Time `db:"retry_utc"`
 
-	DueCounter     uint64  `db:"due_counter"`
-	RetryCounter   uint32  `db:"retry_counter"`
-	AttemptCounter uint32  `db:"attempt_counter"`
 	Attempt        uint32  `db:"attempt"`
 	AssignedWorker *string `db:"assigned_worker"`
 

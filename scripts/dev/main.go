@@ -20,27 +20,12 @@ func main() {
 	s := &supervisor.Supervisor{
 		Services: []*supervisor.Service{
 			{
-				Name:       "scheduler",
-				Enabled:    services.HasOrUnset("scheduler"),
-				Background: func(_ context.Context) context.Context { return context.Background() },
-				Command:    "go",
-				Args:       []string{"run", "sandman-scheduler/main.go"},
-				Env:        append([]string{"EXPVAR_BIND_ADDR=:8081"}, os.Environ()...),
-				WatchedPaths: []string{
-					"./pkg/...",
-					"./sandman-scheduler/...",
-				},
-				Stdout:        supervisor.PrefixWriter{Prefix: "scheduler| ", Writer: os.Stdout},
-				Stderr:        supervisor.PrefixWriter{Prefix: "scheduler-err| ", Writer: os.Stdout},
-				RestartPolicy: supervisor.RestartPolicySuccessiveFailures(5),
-			},
-			{
 				Name:       "worker",
 				Enabled:    services.HasOrUnset("worker"),
 				Background: func(_ context.Context) context.Context { return context.Background() },
 				Command:    "go",
 				Args:       []string{"run", "sandman-worker/main.go"},
-				Env:        append([]string{"EXPVAR_BIND_ADDR=:8082"}, os.Environ()...),
+				Env:        append([]string{"EXPVAR_BIND_ADDR=:8081"}, os.Environ()...),
 				WatchedPaths: []string{
 					"./pkg/...",
 					"./sandman-worker/...",
@@ -55,7 +40,7 @@ func main() {
 				Background: func(_ context.Context) context.Context { return context.Background() },
 				Command:    "go",
 				Args:       []string{"run", "sandman-srv/main.go"},
-				Env:        append([]string{"EXPVAR_BIND_ADDR=:8083"}, os.Environ()...),
+				Env:        append([]string{"EXPVAR_BIND_ADDR=:8082"}, os.Environ()...),
 				WatchedPaths: []string{
 					"./pkg/...",
 					"./sandman-srv/...",

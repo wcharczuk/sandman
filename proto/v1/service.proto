@@ -15,10 +15,6 @@ service Timers {
     rpc DeleteTimers(DeleteTimersArgs) returns (google.protobuf.Empty) {}
 }
 
-service Workers {
-    rpc ListWorkers(ListWorkersArgs) returns (ListWorkersResponse) {}
-}
-
 message Timer {
 	string id = 1;
 	string name = 2;
@@ -26,31 +22,22 @@ message Timer {
 	uint32 priority = 4;
 	string shard_key = 5;
 
-	google.protobuf.Timestamp created_utc = 6;
-	google.protobuf.Timestamp due_utc = 7;
+	google.protobuf.Timestamp created_utc = 10;
+	google.protobuf.Timestamp due_utc = 11;
+	google.protobuf.Timestamp assigned_until_utc = 12;
+	google.protobuf.Timestamp retry_utc = 13;
 
-	uint64 due_counter = 10;
-	uint32 retry_counter = 12;
-	uint32 attempt_counter = 13;
-	uint32 attempt = 14;
-	string assigned_worker = 15;
+	uint32 attempt = 20;
+	string assigned_worker = 21;
 
-	string hook_url = 20;
-	string hook_method = 21;
-	map<string,string> hook_headers = 22;
-	bytes hook_body = 25;
+	string hook_url = 30;
+	string hook_method = 41;
+	map<string,string> hook_headers = 42;
+	bytes hook_body = 43;
 
-	google.protobuf.Timestamp delivered_utc = 30;
-	uint32 delivered_status_code = 31;
-	string delivered_err = 32;
-}
-
-message Worker {
-	string id = 1;
-	string name = 2;
-	map<string,string> labels = 3;
-	google.protobuf.Timestamp first_seen_utc = 10;
-	google.protobuf.Timestamp last_seen_utc = 11;
+	google.protobuf.Timestamp delivered_utc = 50;
+	uint32 delivered_status_code = 51;
+	string delivered_err = 52;
 }
 
 message GetTimerArgs {
@@ -62,14 +49,6 @@ message ListTimersArgs {
 	google.protobuf.Timestamp after = 1;
 	google.protobuf.Timestamp before = 2;
 	string selector = 3;
-}
-
-message ListWorkersArgs {
-	string selector = 1;
-}
-
-message ListWorkersResponse {
-	repeated Worker workers = 1;
 }
 
 message DeleteTimerArgs {

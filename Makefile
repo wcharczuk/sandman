@@ -1,6 +1,5 @@
 PREFIX ?= $(shell pwd)
 
-
 init: ensure-protoc-gen-go ensure-protoc-gen-go-grpc
 
 ensure-protoc-gen-go:
