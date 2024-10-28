@@ -26,7 +26,7 @@ The design goals with `sandman` are as follows:
 
 When a timer is created, it gets inserted into one big table, the `timers` table, with a `due_utc` value. The `timers` table has no indexes outside a unique key for the user supplied "name" field.
 
-From here, workers poll the table every 10 seconds, pulling 255 "due" timers per poll. These timers are sent via. their "hook" details with 5 second timeouts.
+From here, by default workers poll the table every 5 seconds, fetching at most 255 "due" timers per poll. These timers are sent via. their "hook" details with 1 second timeouts.
 
 Workers can be added as needed to scale for timer due spikes, as they cooperatively mark subsets of the `timers` table for assignment.
 
@@ -35,6 +35,15 @@ Similarly, as the database becomes loaded, additional replicas can be added to d
 The idea here is by keeping the table simple, and keeping inserts fast and leaning on horizontal scale for polling and delivery, we can scale the system as needed to handle load.
 
 Additionally, timers have `shard_key` fields to provide a mechanism to distribute timers "fairly" based on shard assignment. The way this works in practice is when workers poll for timers, they order by the user-supplied priority on the timer, and add a "boost" priority based on the shard key assignment within 3600 buckets (i.e. seconds within the hour). This has the effect of randomizing the polling order and cutoff for which timers are fetched for each due period, keeping "hot" shards from hogging the delivery capacity.
+
+# Scale modeling
+
+Let's imagine we use the default settings (255 timers per poll, 255 timer parallelism, 5 second polling interval, 1 second timeouts).
+
+We can then factor the number of workers we'd need for specific situations as follows:
+- Per "minute" per worker throughput: 255 * (60/5) = 3060 per minute
+- if we need to send e.g. 1mm per minute, we'd need ~326 workers
+- we can squeeze that down if a worker can handle sending 1000 hooks at once, in which case we'd only need 83 workers
 
 # Getting started
 

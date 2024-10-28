@@ -38,9 +38,15 @@ func OptParallelism(parallelism int) WorkerOption {
 	}
 }
 
-func OptTickInterval(tickInterval time.Duration) WorkerOption {
+func OptPollingInterval(tickInterval time.Duration) WorkerOption {
 	return func(w *Worker) {
-		w.tickInterval = tickInterval
+		w.pollingInterval = tickInterval
+	}
+}
+
+func OptHookTimeout(timeout time.Duration) WorkerOption {
+	return func(w *Worker) {
+		w.hookTimeout = timeout
 	}
 }
 
@@ -54,9 +60,10 @@ type Worker struct {
 	identity string
 	mgr      *model.Manager
 
-	parallelism  int
-	tickInterval time.Duration
-	batchSize    int
+	parallelism     int
+	pollingInterval time.Duration
+	hookTimeout     time.Duration
+	batchSize       int
 
 	http *http.Transport
 
@@ -102,15 +109,6 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-const defaultTickInterval = 10 * time.Second
-
-func (w *Worker) tickIntervalOrDefault() time.Duration {
-	if w.tickInterval > 0 {
-		return w.tickInterval
-	}
-	return defaultTickInterval
-}
-
 const defaultParallelism = 255
 
 func (w *Worker) parallelismOrDefault() int {
@@ -118,6 +116,24 @@ func (w *Worker) parallelismOrDefault() int {
 		return w.parallelism
 	}
 	return defaultParallelism
+}
+
+const defaultPollingInterval = 5 * time.Second
+
+func (w *Worker) tickIntervalOrDefault() time.Duration {
+	if w.pollingInterval > 0 {
+		return w.pollingInterval
+	}
+	return defaultPollingInterval
+}
+
+const defaultHookTimeout = 1 * time.Second
+
+func (w *Worker) hookTimeoutOrDefault() time.Duration {
+	if w.hookTimeout > 0 {
+		return w.hookTimeout
+	}
+	return defaultHookTimeout
 }
 
 const defaultBatchSize = 255
@@ -226,7 +242,7 @@ func (w *Worker) makeHookRequest(t *model.Timer) (*http.Response, error) {
 		method = http.MethodPost
 	}
 
-	requestContext, cancelTimeout := context.WithTimeout(context.Background(), 5*time.Second)
+	requestContext, cancelTimeout := context.WithTimeout(context.Background(), w.hookTimeoutOrDefault())
 	defer cancelTimeout()
 	req, err := http.NewRequestWithContext(requestContext, method, t.HookURL, body)
 	if err != nil {
