@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"time"
 
@@ -33,6 +34,11 @@ var command = &cli.Command{
 			Usage: "The number of timers to create",
 			Value: 1024,
 		},
+		&cli.DurationFlag{
+			Name:  "duration",
+			Usage: "The duration to create timers for",
+			Value: 30 * time.Second,
+		},
 		&cli.StringMapFlag{
 			Name:    "label",
 			Aliases: []string{"l"},
@@ -43,8 +49,12 @@ var command = &cli.Command{
 			Value:   1,
 		},
 		&cli.DurationFlag{
-			Name:  "due-in",
-			Value: 5 * time.Minute,
+			Name:  "due-in-min",
+			Value: 10 * time.Second,
+		},
+		&cli.DurationFlag{
+			Name:  "due-in-max",
+			Value: 300 * time.Second,
 		},
 		&cli.StringFlag{
 			Name:  "hook-url",
@@ -62,12 +72,15 @@ var command = &cli.Command{
 		},
 	),
 	Action: func(ctx context.Context, cmd *cli.Command) error {
-		var count = int(cmd.Int("count"))
+		var (
+			count    = uint64(cmd.Int("count"))
+			duration = cmd.Duration("duration")
+		)
+
 		c, err := createClient(cmd)
 		if err != nil {
 			return fmt.Errorf("load test; create client: %w", err)
 		}
-
 		var hookBodyData string
 		if hookBodyPath := cmd.String("hook-body"); hookBodyPath != "" {
 			rawHookBodyData, err := cliutil.FileOrStdin(hookBodyPath)
@@ -86,17 +99,34 @@ var command = &cli.Command{
 				Body:    hookBodyData,
 			},
 		}
-		if dueIn := cmd.Duration("due-in"); dueIn > 0 {
-			timer.DueUTC = time.Now().UTC().Add(dueIn)
-		} else {
-			timer.DueUTC = time.Now().UTC().Add(time.Minute)
+
+		dueInMin := cmd.Duration("due-in-min")
+		dueInMax := cmd.Duration("due-in-max")
+
+		randomDueIn := func() time.Duration {
+			var min, max = dueInMin, dueInMax
+			if min > max {
+				min, max = max, min
+			}
+			if min == max {
+				return min
+			}
+			return min + time.Duration(rand.Int64N(int64(max-min+1)))
 		}
-		for x := 0; x < count; x++ {
+
+		var x uint64
+		var start = time.Now()
+		for {
+
 			timer.Name = uuid.V4().String()
 			timer.ShardKey = fmt.Sprintf("uid_%04d", x)
+			timer.DueUTC = time.Now().UTC().Add(randomDueIn())
 			_, err := c.CreateTimer(ctx, timer.ToProto())
 			if err != nil {
 				return fmt.Errorf("load test; create timer failed: %w", err)
+			}
+			if (count > 0 && x >= count) || (duration > 0 && time.Since(start) >= duration) {
+				break
 			}
 		}
 		return nil

@@ -14,9 +14,12 @@ generate:
 test:
 	@go test ./...
 
+load-test:
+	@go run scripts/load_test/main.go
+
 db:
-	@cockroach sql --insecure --execute="drop database if exists sandman"
-	@cockroach sql --insecure --execute="create database sandman"
+	@mikoshi sql --insecure --execute="drop database if exists sandman"
+	@mikoshi sql --insecure --execute="create database sandman"
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run sandman-worker/main.go -db-migrate -start=false
 
 migrate:
