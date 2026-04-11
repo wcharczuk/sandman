@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"os"
 	"time"
@@ -31,13 +32,11 @@ var command = &cli.Command{
 	Flags: DefaultClientFlags(
 		&cli.IntFlag{
 			Name:  "count",
-			Usage: "The number of timers to create",
-			Value: 1024,
+			Usage: "The number of timers to create.",
 		},
 		&cli.DurationFlag{
 			Name:  "duration",
-			Usage: "The duration to create timers for",
-			Value: 30 * time.Second,
+			Usage: "The duration to create timers for.",
 		},
 		&cli.StringMapFlag{
 			Name:    "label",
@@ -58,7 +57,7 @@ var command = &cli.Command{
 		},
 		&cli.StringFlag{
 			Name:  "hook-url",
-			Value: "http://localhost:8081",
+			Value: "http://localhost:8080",
 		},
 		&cli.StringFlag{
 			Name:  "hook-method",
@@ -117,7 +116,6 @@ var command = &cli.Command{
 		var x uint64
 		var start = time.Now()
 		for {
-
 			timer.Name = uuid.V4().String()
 			timer.ShardKey = fmt.Sprintf("uid_%04d", x)
 			timer.DueUTC = time.Now().UTC().Add(randomDueIn())
@@ -128,6 +126,10 @@ var command = &cli.Command{
 			if (count > 0 && x >= count) || (duration > 0 && time.Since(start) >= duration) {
 				break
 			}
+			if x%100 == 0 {
+				slog.Info("load-test progressing", slog.Int("count", int(x)))
+			}
+			x++
 		}
 		return nil
 	},

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"expvar"
+	"flag"
 	"net/http"
 	"os"
 	"sandman/pkg/config"
@@ -10,6 +11,7 @@ import (
 	"sandman/pkg/worker"
 
 	"go.charczuk.com/sdk/apputil"
+	"go.charczuk.com/sdk/configutil"
 	"go.charczuk.com/sdk/db"
 	"go.charczuk.com/sdk/db/dbutil"
 	"go.charczuk.com/sdk/db/migration"
@@ -17,23 +19,36 @@ import (
 	"go.charczuk.com/sdk/slant"
 )
 
-func expvarBindAddr() string {
-	if addr := os.Getenv("EXPVAR_BIND_ADDR"); addr != "" {
-		return addr
-	}
-	return ":8080"
+var (
+	flagExpvarBindAddr = flag.String("expvar-bind-addr", "", "The expvar bind address")
+	flagHostname       = flag.String("hostname", "", "The worker hostname")
+)
+
+type workerConfig struct {
+	config.Config `yaml:",inline"`
+
+	ExpvarBindAddr string
 }
 
-var entrypoint = apputil.DBEntryPoint[config.Config]{
-	Setup: func(ctx context.Context, cfg config.Config) error {
+func (wc *workerConfig) Resolve(ctx context.Context) error {
+	return configutil.Resolve(
+		ctx,
+		(&wc.Config).Resolve,
+		configutil.Set(&wc.Hostname, configutil.Lazy(flagHostname), configutil.Env[string]("HOSTNAME")),
+		configutil.Set(&wc.ExpvarBindAddr, configutil.Lazy(flagExpvarBindAddr), configutil.Env[string]("EXPVAR_BIND_ADDR"), configutil.Const(":8090")),
+	)
+}
+
+var entrypoint = apputil.DBEntryPoint[workerConfig]{
+	Setup: func(ctx context.Context, cfg workerConfig) error {
 		return nil
 	},
-	Migrate: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
+	Migrate: func(ctx context.Context, cfg workerConfig, dbc *db.Connection) error {
 		return model.Migrations(
 			migration.OptLog(log.GetLogger(ctx)),
 		).Apply(ctx, dbc)
 	},
-	Start: func(ctx context.Context, cfg config.Config, dbc *db.Connection) error {
+	Start: func(ctx context.Context, cfg workerConfig, dbc *db.Connection) error {
 		slant.Print(os.Stdout, "sandman-worker")
 		modelMgr := &model.Manager{
 			BaseManager: dbutil.NewBaseManager(dbc),
@@ -44,7 +59,7 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		w := worker.New(cfg.Hostname, modelMgr)
 		w.Vars().Publish()
 		go func() {
-			if err := http.ListenAndServe(expvarBindAddr(), expvar.Handler()); err != nil {
+			if err := http.ListenAndServe(cfg.ExpvarBindAddr, expvar.Handler()); err != nil {
 				log.GetLogger(ctx).Error("expvar server error", log.Any("err", err))
 			}
 		}()
