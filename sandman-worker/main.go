@@ -22,6 +22,7 @@ import (
 var (
 	flagExpvarBindAddr = flag.String("expvar-bind-addr", "", "The expvar bind address")
 	flagHostname       = flag.String("hostname", "", "The worker hostname")
+	flagOrdinal        = flag.Int("ordinal", 0, "The ordinal of the worker (or index in a worker ring")
 )
 
 type workerConfig struct {

@@ -15,6 +15,10 @@ service Timers {
     rpc DeleteTimers(DeleteTimersArgs) returns (google.protobuf.Empty) {}
 }
 
+service Workers {
+    rpc ListWorkers(ListWorkersArgs) returns (ListWorkersResponse) {}
+}
+
 message Timer {
 	string id = 1;
 	string name = 2;
@@ -68,4 +72,18 @@ message ListTimersResponse {
 
 message IdentifierResponse {
 	string id = 1;
+}
+
+message Worker {
+	string hostname = 1;
+	google.protobuf.Timestamp created_utc = 2;
+	google.protobuf.Timestamp last_seen_utc = 3;
+}
+
+message ListWorkersArgs {
+	google.protobuf.Timestamp last_seen_after = 1;
+}
+
+message ListWorkersResponse {
+	repeated Worker workers = 1;
 }

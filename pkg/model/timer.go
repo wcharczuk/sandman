@@ -1,6 +1,7 @@
 package model
 
 import (
+	"maps"
 	"time"
 
 	"go.charczuk.com/sdk/db"
@@ -43,9 +44,7 @@ type Timer struct {
 
 func (t Timer) MatchLabels() map[string]string {
 	output := make(map[string]string, len(t.Labels))
-	for key, value := range t.Labels {
-		output[key] = value
-	}
+	maps.Copy(output, t.Labels)
 	if t.AssignedWorker != nil {
 		output["assigned"] = "true"
 		output["assigned_worker"] = *t.AssignedWorker

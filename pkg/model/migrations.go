@@ -16,6 +16,12 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 						dbgen.Index(Timer{}, "due_utc", "attempt", "delivered_utc"),
 					),
 				),
+				migration.NewGroupWithAction(
+					dbgen.TableFrom(
+						Worker{},
+						dbgen.Index(Worker{}, "last_seen_utc"),
+					),
+				),
 			),
 		)...,
 	)

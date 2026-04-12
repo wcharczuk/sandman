@@ -557,3 +557,76 @@ func Test_Manager_BulkMarkDelivered(t *testing.T) {
 	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[40].ID) && t.DeliveredUTC != nil })
 	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[45].ID) && t.DeliveredUTC != nil })
 }
+
+func Test_Manager_WorkerSeen(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	ts := time.Now().UTC()
+	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
+	assert.ItsNil(t, err)
+
+	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
+	assert.ItsNil(t, err)
+
+	var workers []Worker
+
+	ts = ts.Add(time.Minute)
+	err = modelMgr.BaseManager.Invoke(ctx).All(&workers)
+	assert.ItsNil(t, err)
+	assert.ItsLen(t, workers, 2)
+
+	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
+	assert.ItsNil(t, err)
+
+	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
+	assert.ItsNil(t, err)
+
+	var verify []Worker
+	err = modelMgr.BaseManager.Invoke(ctx).All(&verify)
+	assert.ItsNil(t, err)
+	assert.ItsLen(t, workers, 2)
+}
+
+func Test_Manager_GetWorkers(t *testing.T) {
+	ctx := context.Background()
+	tx, err := testutil.DefaultDB().BeginTx(ctx)
+	assert.ItsNil(t, err)
+	defer tx.Rollback()
+
+	modelMgr := &Manager{
+		BaseManager: dbutil.NewBaseManager(
+			testutil.DefaultDB(),
+			db.OptTx(tx),
+		),
+	}
+	err = modelMgr.Initialize(ctx)
+	assert.ItsNil(t, err)
+	defer modelMgr.Close()
+
+	ts := time.Now().UTC()
+	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
+	assert.ItsNil(t, err)
+
+	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
+	assert.ItsNil(t, err)
+
+	err = modelMgr.WorkerSeen(ctx, "worker-02", ts.Add(-time.Minute))
+	assert.ItsNil(t, err)
+
+	workers, err := modelMgr.GetWorkers(ctx, ts.Add(-30*time.Second))
+	assert.ItsNil(t, err)
+	assert.ItsLen(t, workers, 2)
+}

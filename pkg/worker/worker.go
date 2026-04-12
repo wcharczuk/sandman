@@ -147,6 +147,12 @@ func (w *Worker) batchSizeOrDefault() int {
 
 func (w *Worker) processTick(ctx context.Context) {
 	nowUTC := time.Now().UTC()
+
+	if err := w.mgr.WorkerSeen(ctx, w.identity, nowUTC); err != nil {
+		log.GetLogger(ctx).Error("worker; failed to update last seen", log.Any("err", err))
+		return
+	}
+
 	timers, err := w.mgr.GetDueTimers(ctx, w.identity, nowUTC, w.batchSizeOrDefault())
 	if err != nil {
 		log.GetLogger(ctx).Error("worker; failed to get timers", log.Any("err", err))

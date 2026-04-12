@@ -24,6 +24,8 @@ type Manager struct {
 	deleteTimerByID     *sql.Stmt
 	deleteTimerByName   *sql.Stmt
 	bulkMarkDelivered   *sql.Stmt
+	workerSeen          *sql.Stmt
+	getWorkers          *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
@@ -65,6 +67,16 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.bulkMarkDelivered, err = m.Invoke(ctx).Prepare(execBulkMarkDelivered)
 	if err != nil {
 		err = fmt.Errorf("bulkMarkDelivered: %w", err)
+		return
+	}
+	m.workerSeen, err = m.Invoke(ctx).Prepare(execWorkerSeen)
+	if err != nil {
+		err = fmt.Errorf("workerSeen: %w", err)
+		return
+	}
+	m.getWorkers, err = m.Invoke(ctx).Prepare(queryGetWorkers)
+	if err != nil {
+		err = fmt.Errorf("getWorkers: %w", err)
 		return
 	}
 	return
@@ -278,6 +290,32 @@ func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matc
 	statement := strings.Join(stanzas, "\n")
 	_, err := m.Invoke(ctx).Exec(statement, args...)
 	return err
+}
+
+const execWorkerSeen = `INSERT INTO workers (hostname, created_utc, last_seen_utc) 
+VALUES ($1, $2, $2) ON CONFLICT (hostname) DO UPDATE SET last_seen_utc = $2`
+
+func (m Manager) WorkerSeen(ctx context.Context, workerHostname string, ts time.Time) (err error) {
+	_, err = m.workerSeen.ExecContext(ctx, workerHostname, ts)
+	return
+}
+
+var queryGetWorkers = fmt.Sprintf(`SELECT %s FROM workers WHERE last_seen_utc > $1`, db.ColumnNamesCSV(workerColumns))
+
+func (m Manager) GetWorkers(ctx context.Context, asOf time.Time) (output []Worker, err error) {
+	var rows *sql.Rows
+	rows, err = m.getWorkers.QueryContext(ctx, asOf)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var t Worker
+		if err = db.PopulateInOrder(&t, rows, workerColumns); err != nil {
+			return
+		}
+		output = append(output, t)
+	}
+	return
 }
 
 //
