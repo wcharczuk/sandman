@@ -25,7 +25,8 @@ type Manager struct {
 	deleteTimerByName   *sql.Stmt
 	bulkMarkDelivered   *sql.Stmt
 	workerSeen          *sql.Stmt
-	getWorkers          *sql.Stmt
+	getWorkers            *sql.Stmt
+	getPeakTimersDueCount *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
@@ -79,6 +80,11 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		err = fmt.Errorf("getWorkers: %w", err)
 		return
 	}
+	m.getPeakTimersDueCount, err = m.Invoke(ctx).Prepare(queryGetPeakTimersDueCount)
+	if err != nil {
+		err = fmt.Errorf("getPeakTimersDueCount: %w", err)
+		return
+	}
 	return
 }
 
@@ -105,6 +111,9 @@ func (m Manager) Close() error {
 		return err
 	}
 	if err := m.bulkMarkDelivered.Close(); err != nil {
+		return err
+	}
+	if err := m.getPeakTimersDueCount.Close(); err != nil {
 		return err
 	}
 	return nil
@@ -326,5 +335,19 @@ const execBulkMarkDelivered = `UPDATE timers SET delivered_utc = $1 WHERE id = A
 
 func (m Manager) BulkMarkDelivered(ctx context.Context, deliveredUTC time.Time, ids []uuid.UUID) (err error) {
 	_, err = m.bulkMarkDelivered.ExecContext(ctx, deliveredUTC, ids)
+	return
+}
+
+var queryGetPeakTimersDueCount = fmt.Sprintf(`SELECT COALESCE(MAX(cnt), 0) FROM (
+	SELECT count(*) as cnt
+	FROM %s
+	WHERE due_utc >= $1 AND due_utc < $2
+		AND delivered_utc IS NULL
+		AND attempt < 5
+	GROUP BY floor(extract(epoch from due_utc) / $3)
+) sub`, timerTableName)
+
+func (m Manager) GetPeakTimersDueCount(ctx context.Context, after, before time.Time, bucketSeconds float64) (count int64, err error) {
+	err = m.getPeakTimersDueCount.QueryRowContext(ctx, after, before, bucketSeconds).Scan(&count)
 	return
 }

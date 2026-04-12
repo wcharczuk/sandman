@@ -20,15 +20,13 @@ import (
 )
 
 var (
-	flagExpvarBindAddr = flag.String("expvar-bind-addr", "", "The expvar bind address")
-	flagHostname       = flag.String("hostname", "", "The worker hostname")
-	flagOrdinal        = flag.Int("ordinal", 0, "The ordinal of the worker (or index in a worker ring")
+	flagExpvarListenAddr = flag.String("expvar-listen-addr", "", "The expvar listen address")
+	flagHostname         = flag.String("hostname", "", "The worker hostname")
 )
 
 type workerConfig struct {
-	config.Config `yaml:",inline"`
-
-	ExpvarBindAddr string
+	config.Config    `yaml:",inline"`
+	ExpvarListenAddr string
 }
 
 func (wc *workerConfig) Resolve(ctx context.Context) error {
@@ -36,7 +34,7 @@ func (wc *workerConfig) Resolve(ctx context.Context) error {
 		ctx,
 		(&wc.Config).Resolve,
 		configutil.Set(&wc.Hostname, configutil.Lazy(flagHostname), configutil.Env[string]("HOSTNAME")),
-		configutil.Set(&wc.ExpvarBindAddr, configutil.Lazy(flagExpvarBindAddr), configutil.Env[string]("EXPVAR_BIND_ADDR"), configutil.Const(":8090")),
+		configutil.Set(&wc.ExpvarListenAddr, configutil.Lazy(flagExpvarListenAddr), configutil.Env[string]("EXPVAR_LISTEN_ADDR")),
 	)
 }
 
@@ -57,13 +55,18 @@ var entrypoint = apputil.DBEntryPoint[workerConfig]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		w := worker.New(cfg.Hostname, modelMgr)
-		w.Vars().Publish()
-		go func() {
-			if err := http.ListenAndServe(cfg.ExpvarBindAddr, expvar.Handler()); err != nil {
-				log.GetLogger(ctx).Error("expvar server error", log.Any("err", err))
-			}
-		}()
+		w := worker.New(cfg.Hostname, modelMgr,
+			worker.OptBatchSize(cfg.Worker.BatchSizeOrDefault()),
+			worker.OptPollingInterval(cfg.Worker.PollingIntervalOrDefault()),
+		)
+		if cfg.ExpvarListenAddr != "" {
+			w.Vars().Publish()
+			go func() {
+				if err := http.ListenAndServe(cfg.ExpvarListenAddr, expvar.Handler()); err != nil {
+					log.GetLogger(ctx).Error("expvar server error", log.Any("err", err))
+				}
+			}()
+		}
 		return w.Run(ctx)
 	},
 }

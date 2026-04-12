@@ -36,13 +36,19 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
+
 		logger := log.GetLogger(ctx)
+		var interceptors = []grpc.UnaryServerInterceptor{
+			grpcutil.Recover(),
+			grpcutil.Logged(logger),
+		}
+
+		serverOpts := grpc.ChainUnaryInterceptor(interceptors...)
+
 		s := grpc.NewServer(
-			grpc.ChainUnaryInterceptor(
-				grpcutil.Recover(),
-				grpcutil.Logged(logger),
-			),
+			serverOpts,
 		)
+
 		ts := server.TimerServer{Model: modelMgr}
 		v1.RegisterTimersServer(s, ts)
 		ws := server.WorkerServer{Model: modelMgr}
@@ -51,8 +57,8 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		bindAddr := cfg.Server.BindAddr
 		var socketListener net.Listener
 		var err error
-		if strings.HasPrefix(bindAddr, "unix://") {
-			socketListener, err = net.Listen("unix", strings.TrimPrefix(bindAddr, "unix://"))
+		if after, ok := strings.CutPrefix(bindAddr, "unix://"); ok {
+			socketListener, err = net.Listen("unix", after)
 		} else {
 			socketListener, err = net.Listen("tcp", bindAddr)
 		}

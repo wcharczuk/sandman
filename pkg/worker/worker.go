@@ -136,7 +136,7 @@ func (w *Worker) hookTimeoutOrDefault() time.Duration {
 	return defaultHookTimeout
 }
 
-const defaultBatchSize = 1024
+const defaultBatchSize = 255
 
 func (w *Worker) batchSizeOrDefault() int {
 	if w.batchSize > 0 {

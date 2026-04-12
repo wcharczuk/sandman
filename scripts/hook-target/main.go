@@ -10,20 +10,20 @@ import (
 )
 
 var (
-	flagSkipLogs = flag.Bool("skip-logs", false, "If we should suppress per-request logging output")
-	flagBindAddr = flag.String("bind-addr", "127.0.0.1:8080", "The bind address (defers to the `BIND_ADDR` environment variable)")
+	flagSkipLogs   = flag.Bool("skip-logs", false, "If we should suppress per-request logging output")
+	flagListenAddr = flag.String("listen-addr", "127.0.0.1:8080", "The listen address (defers to the `LISTEN_ADDR` environment variable)")
 )
 
-func bindAddr() string {
-	if value := os.Getenv("BIND_ADDR"); value != "" {
+func listenAddr() string {
+	if value := os.Getenv("LISTEN_ADDR"); value != "" {
 		return value
 	}
-	return *flagBindAddr
+	return *flagListenAddr
 }
 
 func main() {
 	flag.Parse()
-	addr := bindAddr()
+	addr := listenAddr()
 	srv := http.Server{
 		Addr: addr,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +41,7 @@ func main() {
 			fmt.Fprintf(w, "OK!")
 		}),
 	}
-	slog.Info("listening on", slog.String("bind_addr", addr))
+	slog.Info("listening on", slog.String("listen_addr", addr))
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("http server failed", slog.Any("err", err))
 		os.Exit(1)
