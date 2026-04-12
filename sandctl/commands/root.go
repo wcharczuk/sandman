@@ -8,6 +8,7 @@ func Root() *cli.Command {
 		Usage: "Control sandman servers",
 		Commands: []*cli.Command{
 			Timers(),
+			Workers(),
 		},
 	}
 }

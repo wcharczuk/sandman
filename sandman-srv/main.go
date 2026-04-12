@@ -45,6 +45,8 @@ var entrypoint = apputil.DBEntryPoint[config.Config]{
 		)
 		ts := server.TimerServer{Model: modelMgr}
 		v1.RegisterTimersServer(s, ts)
+		ws := server.WorkerServer{Model: modelMgr}
+		v1.RegisterWorkersServer(s, ws)
 
 		bindAddr := cfg.Server.BindAddr
 		var socketListener net.Listener

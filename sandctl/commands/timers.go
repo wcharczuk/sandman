@@ -122,7 +122,7 @@ func timerCreate() *cli.Command {
 			if err := yaml.Unmarshal(data, &timer); err != nil {
 				return fmt.Errorf("ticker create; could not unmarshal file: %w", err)
 			}
-			c, err := createClient(cmd)
+			c, err := createTimersClient(cmd)
 			if err != nil {
 				return fmt.Errorf("ticker create; create client: %w", err)
 			}
@@ -136,7 +136,7 @@ func timerCreate() *cli.Command {
 	}
 }
 
-func createClient(cmd *cli.Command) (v1.TimersClient, error) {
+func createTimersClient(cmd *cli.Command) (v1.TimersClient, error) {
 	addr := cmd.String("address")
 	authority := cmd.String("authority")
 	c, err := grpc.NewClient(addr, grpc.WithAuthority(authority), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -167,9 +167,9 @@ func timerList() *cli.Command {
 			},
 		),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			c, err := createClient(cmd)
+			c, err := createTimersClient(cmd)
 			if err != nil {
-				return fmt.Errorf("ticker create; create client: %w", err)
+				return fmt.Errorf("tickers list; create client: %w", err)
 			}
 			res, err := c.ListTimers(ctx, &v1.ListTimersArgs{
 				After:    timestamppb.New(cmd.Timestamp("after")),
@@ -206,7 +206,7 @@ func timerGet() *cli.Command {
 			},
 		),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			c, err := createClient(cmd)
+			c, err := createTimersClient(cmd)
 			if err != nil {
 				return fmt.Errorf("ticker create; create client: %w", err)
 			}
@@ -244,7 +244,7 @@ func timerDelete() *cli.Command {
 			},
 		),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			c, err := createClient(cmd)
+			c, err := createTimersClient(cmd)
 			if err != nil {
 				return fmt.Errorf("ticker create; create client: %w", err)
 			}
