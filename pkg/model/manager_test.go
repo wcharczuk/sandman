@@ -377,6 +377,12 @@ func computePseudoPriority(asOf time.Time, t *Timer) (output pseudoPriority) {
 	bucket := uint32(asOf.Minute()) * uint32(asOf.Second())
 	shardWeight := ((t.Shard % 3600) + bucket) % 3600
 	output.Priority += shardWeight * 100
+
+	// boost by how many seconds the timer is past its due time so older
+	// (more overdue) timers drain before newer ones.
+	if overdue := asOf.Sub(t.DueUTC); overdue > 0 {
+		output.Priority += uint32(overdue/time.Second) * 100
+	}
 	return
 }
 
