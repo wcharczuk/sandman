@@ -31,7 +31,7 @@ func main() {
 					"./sandman-worker/...",
 				},
 				Stdout:        supervisor.PrefixWriter{Prefix: "worker-00-out| ", Writer: os.Stdout},
-				Stderr:        supervisor.PrefixWriter{Prefix: "worker-00-err| ", Writer: os.Stdout},
+				Stderr:        supervisor.PrefixWriter{Prefix: "worker-00-err| ", Writer: os.Stderr},
 				RestartPolicy: supervisor.RestartPolicySuccessiveFailures(5),
 			},
 			{
@@ -46,7 +46,7 @@ func main() {
 					"./sandman-worker/...",
 				},
 				Stdout:        supervisor.PrefixWriter{Prefix: "worker-01-out| ", Writer: os.Stdout},
-				Stderr:        supervisor.PrefixWriter{Prefix: "worker-01-err| ", Writer: os.Stdout},
+				Stderr:        supervisor.PrefixWriter{Prefix: "worker-01-err| ", Writer: os.Stderr},
 				RestartPolicy: supervisor.RestartPolicySuccessiveFailures(5),
 			},
 			{
@@ -61,7 +61,7 @@ func main() {
 					"./sandman-srv/...",
 				},
 				Stdout:        supervisor.PrefixWriter{Prefix: "server| ", Writer: os.Stdout},
-				Stderr:        supervisor.PrefixWriter{Prefix: "server-err| ", Writer: os.Stdout},
+				Stderr:        supervisor.PrefixWriter{Prefix: "server-err| ", Writer: os.Stderr},
 				RestartPolicy: supervisor.RestartPolicySuccessiveFailures(5),
 			},
 			{
@@ -75,7 +75,7 @@ func main() {
 					"./scripts/target/...",
 				},
 				Stdout:        supervisor.PrefixWriter{Prefix: "target| ", Writer: os.Stdout},
-				Stderr:        supervisor.PrefixWriter{Prefix: "target-err| ", Writer: os.Stdout},
+				Stderr:        supervisor.PrefixWriter{Prefix: "target-err| ", Writer: os.Stderr},
 				RestartPolicy: supervisor.RestartPolicySuccessiveFailures(5),
 			},
 		},

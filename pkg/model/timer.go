@@ -7,11 +7,12 @@ import (
 	"go.charczuk.com/sdk/uuid"
 )
 
-var _ db.TableNameProvider = (*Timer)(nil)
-
-var timerTypeMeta = db.TypeMetaFor(Timer{})
-var timerTableName = db.TableName(Timer{})
-var timerColumns = timerTypeMeta.Columns()
+var (
+	_              db.TableNameProvider = (*Timer)(nil)
+	timerTypeMeta                       = db.TypeMetaFor(Timer{})
+	timerTableName                      = db.TableName(Timer{})
+	timerColumns                        = timerTypeMeta.Columns()
+)
 
 // Timer is a promise in the future to deliver an RPC
 type Timer struct {
