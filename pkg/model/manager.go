@@ -27,6 +27,7 @@ type Manager struct {
 	workerSeen          *sql.Stmt
 	getWorkers            *sql.Stmt
 	getPeakTimersDueCount *sql.Stmt
+	getOverdueTimerCount  *sql.Stmt
 }
 
 func (m *Manager) Initialize(ctx context.Context) (err error) {
@@ -85,6 +86,11 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 		err = fmt.Errorf("getPeakTimersDueCount: %w", err)
 		return
 	}
+	m.getOverdueTimerCount, err = m.Invoke(ctx).Prepare(queryGetOverdueTimerCount)
+	if err != nil {
+		err = fmt.Errorf("getOverdueTimerCount: %w", err)
+		return
+	}
 	return
 }
 
@@ -114,6 +120,9 @@ func (m Manager) Close() error {
 		return err
 	}
 	if err := m.getPeakTimersDueCount.Close(); err != nil {
+		return err
+	}
+	if err := m.getOverdueTimerCount.Close(); err != nil {
 		return err
 	}
 	return nil
@@ -164,41 +173,49 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	return
 }
 
-var queryGetDueTimers = fmt.Sprintf(`UPDATE %[1]s
-SET 
+var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
+	SELECT
+		id, priority, shard, due_utc
+	FROM
+		%[1]s
+	WHERE
+		due_utc < $2
+		AND (
+			assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2)
+		)
+		AND (
+			retry_utc IS NULL OR (retry_utc IS NOT NULL AND retry_utc < $2)
+		)
+		AND attempt < 5
+		AND delivered_utc IS NULL
+	ORDER BY due_utc ASC
+	LIMIT $3 * 10
+	FOR UPDATE SKIP LOCKED
+), selected AS (
+	SELECT
+		id
+	FROM
+		candidates
+	ORDER BY
+		priority
+		+ (
+			(
+				MOD(shard, 3600) + cast(extract('minute', $2::timestamp) * extract('second', $2::timestamp) as BIGINT)
+			)
+			* 100
+		)
+		+ (cast(extract('epoch', $2::timestamp) - extract('epoch', due_utc) as BIGINT) * 100)
+	DESC
+	LIMIT $3
+)
+UPDATE %[1]s
+SET
 	assigned_worker = $1
 	, attempt = attempt + 1
 	, assigned_until_utc = $2::timestamp + interval '1 minute'
 	, retry_utc = $2 + interval '5 minutes'
 WHERE
-	id in (
-		SELECT 
-			id
-		FROM
-			%[1]s
-		WHERE
-			due_utc < $2 
-			AND (
-				assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2) 
-			)
-			AND (
-				retry_utc IS NULL OR (retry_utc IS NOT NULL AND retry_utc < $2) 
-			)
-			AND attempt < 5
-			AND delivered_utc IS NULL
-		ORDER BY
-			priority
-			+ (
-				(
-					MOD(shard, 3600) + cast(extract('minute', $2::timestamp) * extract('second', $2::timestamp) as BIGINT)
-				)
-				* 100
-			)
-			+ (cast(extract('epoch', $2::timestamp) - extract('epoch', due_utc) as BIGINT) * 100)
-		DESC
-		LIMIT $3
-		FOR UPDATE SKIP LOCKED
-)
+	id in (SELECT id FROM selected)
 RETURNING %[2]s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
@@ -349,5 +366,17 @@ var queryGetPeakTimersDueCount = fmt.Sprintf(`SELECT COALESCE(MAX(cnt), 0) FROM 
 
 func (m Manager) GetPeakTimersDueCount(ctx context.Context, after, before time.Time, bucketSeconds float64) (count int64, err error) {
 	err = m.getPeakTimersDueCount.QueryRowContext(ctx, after, before, bucketSeconds).Scan(&count)
+	return
+}
+
+var queryGetOverdueTimerCount = fmt.Sprintf(`SELECT count(*)
+FROM %s
+WHERE due_utc < $1
+	AND delivered_utc IS NULL
+	AND attempt < 5
+`, timerTableName)
+
+func (m Manager) GetOverdueTimerCount(ctx context.Context, asOf time.Time) (count int64, err error) {
+	err = m.getOverdueTimerCount.QueryRowContext(ctx, asOf).Scan(&count)
 	return
 }

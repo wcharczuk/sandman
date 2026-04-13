@@ -55,9 +55,28 @@ func (c *Controller) evaluate(ctx context.Context) {
 		return
 	}
 
+	overdueCount, err := c.Model.GetOverdueTimerCount(ctx, now)
+	if err != nil {
+		logger.Error("controller; failed to get overdue timer count", log.Any("err", err))
+		return
+	}
+
+	// Calculate the per-tick demand from the overdue backlog.
+	// We aim to drain the backlog within one evaluation interval,
+	// so we spread it across the number of polling ticks in that window.
+	ticksPerEval := int64(evalInterval / pollingInterval)
+	var backlogPerTick int64
+	if ticksPerEval > 0 && overdueCount > 0 {
+		backlogPerTick = (overdueCount + ticksPerEval - 1) / ticksPerEval
+	}
+
+	// Workers pick up both overdue and newly-due timers from the same
+	// batch, so total per-tick demand is additive.
+	effectivePeak := peakCount + backlogPerTick
+
 	var desiredReplicas int32
-	if peakCount > 0 {
-		desiredReplicas = int32(math.Ceil(float64(peakCount) / float64(batchSize)))
+	if effectivePeak > 0 {
+		desiredReplicas = int32(math.Ceil(float64(effectivePeak) / float64(batchSize)))
 	}
 	minReplicas := c.Config.MinReplicasOrDefault()
 	if desiredReplicas < minReplicas {
@@ -69,6 +88,9 @@ func (c *Controller) evaluate(ctx context.Context) {
 
 	logger.Info("controller; evaluation complete",
 		log.Int("peak_timers", int(peakCount)),
+		log.Int("overdue_timers", int(overdueCount)),
+		log.Int("backlog_per_tick", int(backlogPerTick)),
+		log.Int("effective_peak", int(effectivePeak)),
 		log.Int("desired_replicas", int(desiredReplicas)),
 		log.Int("batch_size", batchSize),
 		log.Duration("polling_interval", pollingInterval),

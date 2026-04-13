@@ -121,7 +121,7 @@ var command = &cli.Command{
 			timer.DueUTC = time.Now().UTC().Add(randomDueIn())
 			_, err := c.CreateTimer(ctx, timer.ToProto())
 			if err != nil {
-				return fmt.Errorf("load test; create timer failed: %w", err)
+				slog.Error("load test; create timer failed", slog.Any("err", err))
 			}
 			if (count > 0 && x >= count) || (duration > 0 && time.Since(start) >= duration) {
 				break

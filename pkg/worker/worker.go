@@ -180,9 +180,27 @@ func (w *Worker) processTick(ctx context.Context) {
 		log.GetLogger(ctx).Info("worker; marking timers delivered",
 			log.Int("timers", len(deliveredIDs)),
 		)
-		if err := w.mgr.BulkMarkDelivered(ctx, time.Now().UTC(), deliveredIDs); err != nil {
-			log.GetLogger(ctx).Error("worker; failed to mark timers delivered", log.Any("err", err))
+		w.bulkMarkDeliveredWithRetry(ctx, deliveredIDs)
+	}
+}
+
+const bulkMarkDeliveredMaxRetries = 3
+const bulkMarkDeliveredTimeout = 10 * time.Second
+
+func (w *Worker) bulkMarkDeliveredWithRetry(ctx context.Context, ids []uuid.UUID) {
+	logger := log.GetLogger(ctx)
+	for attempt := range bulkMarkDeliveredMaxRetries {
+		markCtx, markCancel := context.WithTimeout(context.Background(), bulkMarkDeliveredTimeout)
+		err := w.mgr.BulkMarkDelivered(markCtx, time.Now().UTC(), ids)
+		markCancel()
+		if err == nil {
+			return
 		}
+		logger.Error("worker; failed to mark timers delivered",
+			log.Int("attempt", attempt+1),
+			log.Int("max_attempts", bulkMarkDeliveredMaxRetries),
+			log.Any("err", err),
+		)
 	}
 }
 
