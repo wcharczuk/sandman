@@ -25,6 +25,21 @@ func (ni NotIn) Matches(labels Labels) bool {
 	return true
 }
 
+// MatchesIter returns the selector result.
+func (ni NotIn) MatchesIter(labelsIterator Iterator) bool {
+	for key, value := range labelsIterator {
+		if key == ni.Key {
+			for _, iv := range ni.Values {
+				if iv == value {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return true
+}
+
 // Validate validates the selector.
 func (ni NotIn) Validate() (err error) {
 	err = CheckKey(ni.Key)

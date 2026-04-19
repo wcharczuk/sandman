@@ -1,7 +1,12 @@
 package apputil
 
 import (
+	"context"
+	"database/sql"
+
+	"go.charczuk.com/sdk/db"
 	"go.charczuk.com/sdk/db/dbgen"
+	"go.charczuk.com/sdk/db/dbutil"
 	"go.charczuk.com/sdk/db/migration"
 )
 
@@ -30,7 +35,12 @@ func MigrationGroups() []*migration.Group {
 
 func extensions() *migration.Group {
 	return migration.NewGroupWithAction(
-		migration.NewStep(migration.Always(), migration.Statements(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`)),
+		migration.NewStep(
+			migration.Always(),
+			migration.ActionFunc(func(ctx context.Context, conn *db.Connection, tx *sql.Tx) error {
+				return dbutil.CreateExtensionPGCrypto(ctx, conn, tx)
+			}),
+		),
 	)
 }
 

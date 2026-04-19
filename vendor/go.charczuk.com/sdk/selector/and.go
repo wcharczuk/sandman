@@ -2,13 +2,24 @@ package selector
 
 import "strings"
 
-// And is a combination selector.
+// And is a combination selector that returns
+// only if a given input matches all the wrapped selectors.
 type And []Selector
 
-// Matches returns if both A and B match the labels.
+// Matches returns if all the wrapped selectors match the labels.
 func (a And) Matches(labels Labels) bool {
 	for _, s := range a {
 		if !s.Matches(labels) {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchesIter returns if all the wrapped selectors match the iterator.
+func (a And) MatchesIter(i Iterator) bool {
+	for _, s := range a {
+		if !s.MatchesIter(i) {
 			return false
 		}
 	}

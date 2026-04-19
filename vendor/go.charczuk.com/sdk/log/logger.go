@@ -10,12 +10,9 @@ import (
 	"time"
 )
 
-const defaultFlags = FlagError | FlagWarn | FlagInfo
-
 // New returns a new logger.
 func New(opts ...Option) *Logger {
 	l := new(Logger)
-	l.flags = defaultFlags.Flag
 	l.output = os.Stdout
 	for _, opt := range opts {
 		opt(l)
@@ -31,14 +28,12 @@ func OptConfig(cfg Config) Option {
 	return func(l *Logger) {
 		if cfg.Disabled {
 			l.output = io.Discard
-			l.flags = FlagDisabled.Flag
 			return
 		}
 		l.skipSource = cfg.SkipSource
 		l.skipTime = cfg.SkipTime
-		l.flags = cfg.Flags.Flag
 		for key, value := range cfg.DefaultAttrs {
-			l.defaultAttrs = append(l.defaultAttrs, String(key, value))
+			l.attrs = append(l.attrs, String(key, value))
 		}
 	}
 }
@@ -50,10 +45,22 @@ func OptOutput(output io.Writer) Option {
 	}
 }
 
-// OptFlags sets the flags provider.
-func OptFlags(flags FlagProvider) Option {
+// OptFilter sets the filter on the log instance.
+//
+// The purpose of the filter is to match specific log messages
+// by attributes passed to the emit method.
+func OptFilter(filter Filter) Option {
 	return func(l *Logger) {
-		l.flags = flags.Flag
+		l.filter = filter
+	}
+}
+
+// OptFilterSelector sets the filter on the log instance to a given compiled selector.
+//
+// If there is an error with the selector (i.e. an invalid selector) this will panic.
+func OptFilterSelector(rawSelector string) Option {
+	return func(l *Logger) {
+		l.filter = FilterSelector(rawSelector)
 	}
 }
 
@@ -74,27 +81,32 @@ func OptSkipTime(skipTime bool) Option {
 // OptAttrs sets the default attributes for log output lines.
 func OptAttrs(attrs ...any) Option {
 	return func(l *Logger) {
-		l.defaultAttrs = argsToAttrSlice(attrs)
+		l.attrs = argsToAttrSlice(attrs)
 	}
 }
 
 // Logger can be used to write to output.
 type Logger struct {
-	output       io.Writer
-	flags        func() Flag
-	group        string
-	skipSource   bool
-	skipTime     bool
-	sourceSkip   int
-	defaultAttrs []Attr
+	output     io.Writer
+	filter     Filter
+	group      string
+	skipSource bool
+	skipTime   bool
+	sourceSkip int
+	jsonAttrs  bool
+	attrs      []Attr
+}
+
+func (l *Logger) show(attrs ...Attr) bool {
+	if l.filter == nil {
+		return true
+	}
+	return l.filter.Show(attrs...)
 }
 
 // Error writes an error message to the logger.
 func (l *Logger) Error(msg string, attrs ...any) {
 	if l == nil {
-		return
-	}
-	if l.flags()&FlagError == 0 {
 		return
 	}
 	l.writeOutput("ERROR", msg, attrs...)
@@ -105,18 +117,12 @@ func (l *Logger) Err(err error, attrs ...any) {
 	if l == nil {
 		return
 	}
-	if l.flags()&FlagError == 0 {
-		return
-	}
 	l.writeOutput("ERROR", fmt.Sprintf("%+v", err), attrs...)
 }
 
 // Info writes an info message to the logger.
 func (l *Logger) Info(msg string, attrs ...any) {
 	if l == nil {
-		return
-	}
-	if l.flags()&FlagInfo == 0 {
 		return
 	}
 	l.writeOutput("INFO", msg, attrs...)
@@ -127,9 +133,6 @@ func (l *Logger) Warn(msg string, attrs ...any) {
 	if l == nil {
 		return
 	}
-	if l.flags()&FlagWarn == 0 {
-		return
-	}
 	l.writeOutput("WARN", msg, attrs...)
 }
 
@@ -138,18 +141,12 @@ func (l *Logger) Debug(msg string, attrs ...any) {
 	if l == nil {
 		return
 	}
-	if l.flags()&FlagDebug == 0 {
-		return
-	}
 	l.writeOutput("DEBUG", msg, attrs...)
 }
 
 // Silly writes a silly message to the logger.
 func (l *Logger) Silly(msg string, attrs ...any) {
 	if l == nil {
-		return
-	}
-	if l.flags()&FlagSilly == 0 {
 		return
 	}
 	l.writeOutput("SILLY", msg, attrs...)
@@ -170,11 +167,18 @@ func (l *Logger) WithSourceSkip(skip int) *Logger {
 }
 
 // WithAttrs returns a new logger and adds new attrs to the logger.
+//
+// You can use this method to build up logger "scopes" with different
+// default attributes for repeated attributes in methods
 func (l *Logger) WithAttrs(attr ...any) *Logger {
 	l2 := l.clone()
-	l2.defaultAttrs = append(l2.defaultAttrs, argsToAttrSlice(attr)...)
+	l2.attrs = append(l2.attrs, argsToAttrSlice(attr)...)
 	return l2
 }
+
+//
+// internal methods
+//
 
 func (l *Logger) clone() *Logger {
 	l2 := *l
@@ -182,31 +186,35 @@ func (l *Logger) clone() *Logger {
 }
 
 func (l *Logger) writeOutput(level, msg string, args ...any) {
+	attrs := argsToAttrSlice(args)
+	attrs = append(l.attrs, attrs...)
+	attrs = append(attrs, String("level", level))
+	if l.group != "" {
+		attrs = append(attrs, String("group", l.group))
+	}
+	if !l.skipSource {
+		attrs = append(attrs, String("source", l.formatPC(l.getPC())))
+	}
+	if !l.show(attrs...) {
+		return
+	}
+
 	buf := new(bytes.Buffer)
 	if !l.skipTime {
 		buf.WriteString(l.formatTimestamp(time.Now().UTC()) + " ")
 	}
-	buf.WriteString(level)
-	if l.group != "" {
-		buf.WriteString(" [" + l.group + "]: ")
-	} else {
-		buf.WriteString(": ")
-	}
 	buf.WriteString(msg)
-	attrs := argsToAttrSlice(args)
-	attrs = append(l.defaultAttrs, attrs...)
-	if !l.skipSource {
-		buf.WriteString(" ")
-		buf.WriteString(String("source", l.formatPC(l.getPC())).String())
-	}
 	if len(attrs) > 0 {
-		buf.WriteString(" ")
+		buf.WriteString(" {")
 	}
 	for index, attr := range attrs {
-		buf.WriteString(attr.String())
+		buf.WriteString(attr.JSON())
 		if index < len(attrs)-1 {
-			buf.WriteString(" ")
+			buf.WriteString(", ")
 		}
+	}
+	if len(attrs) > 0 {
+		buf.WriteString("}")
 	}
 	buf.WriteRune('\n')
 	l.output.Write(buf.Bytes())

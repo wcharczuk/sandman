@@ -177,7 +177,7 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 	SELECT
 		id, priority, shard, due_utc
 	FROM
-		%[1]s
+		%[1]s@ix_timers_due_utc_pending
 	WHERE
 		due_utc < $2
 		AND (
@@ -189,7 +189,7 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		AND attempt < 5
 		AND delivered_utc IS NULL
 	ORDER BY due_utc ASC
-	LIMIT $3 * 10
+	LIMIT $3 * 2
 	FOR UPDATE SKIP LOCKED
 ), selected AS (
 	SELECT
@@ -243,8 +243,12 @@ WHERE
 	AND due_utc < $1
 `, timerTableName)
 
-func (m Manager) CullTimers(ctx context.Context, cutoff time.Time) (err error) {
-	_, err = m.cullTimers.ExecContext(ctx, cutoff)
+func (m Manager) CullTimers(ctx context.Context, cutoff time.Time) (rowsAffected int64, err error) {
+	res, err := m.cullTimers.ExecContext(ctx, cutoff)
+	if err != nil {
+		return
+	}
+	rowsAffected, _ = res.RowsAffected()
 	return
 }
 

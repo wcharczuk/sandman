@@ -9,6 +9,16 @@ func (hk HasKey) Matches(labels Labels) bool {
 	return hasKey
 }
 
+// MatchesIter returns the selector result.
+func (hk HasKey) MatchesIter(labelsIterator Iterator) bool {
+	for key := range labelsIterator {
+		if key == string(hk) {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate validates the selector.
 func (hk HasKey) Validate() (err error) {
 	err = CheckKey(string(hk))

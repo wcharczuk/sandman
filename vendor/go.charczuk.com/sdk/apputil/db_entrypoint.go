@@ -3,7 +3,6 @@ package apputil
 import (
 	"context"
 	"flag"
-	"log/slog"
 	"strings"
 
 	"go.charczuk.com/sdk/cliutil"
@@ -62,14 +61,14 @@ func (e *DBEntryPoint[T]) Main() {
 	)
 	ctx = log.WithLogger(ctx, logger)
 	if len(configPaths) > 0 {
-		logger.Info("using config path(s)", slog.String("config_paths", strings.Join(configPaths, ", ")))
+		logger.Info("using config path(s)", log.String("config_paths", strings.Join(configPaths, ", ")))
 	} else {
 		logger.Info("using environment resolved config")
 	}
 	if e.flagDatabaseSetup && e.Setup != nil {
-		logger.Info("running first time database setup", slog.String("database", e.config.GetDB().Database))
+		logger.Info("running first time database setup", log.String("database", e.config.GetDB().Database))
 		if err := e.Setup(ctx, e.config); err != nil {
-			cliutil.Fatal(err)
+			cliutil.MaybeFatal(err)
 		}
 		logger.Info("running first time database setup complete")
 	} else {
@@ -80,17 +79,17 @@ func (e *DBEntryPoint[T]) Main() {
 		db.OptLog(logger),
 	)
 	if err != nil {
-		cliutil.Fatal(err)
+		cliutil.MaybeFatal(err)
 	}
 	if err = conn.Open(); err != nil {
-		cliutil.Fatal(err)
+		cliutil.MaybeFatal(err)
 	}
 	defer conn.Close()
 
 	if e.flagDatabaseMigrate && e.Migrate != nil {
 		logger.Info("applying database migrations")
 		if err := e.Migrate(ctx, e.config, conn); err != nil {
-			cliutil.Fatal(err)
+			cliutil.MaybeFatal(err)
 		}
 		logger.Info("applying database migrations complete")
 	} else {
@@ -98,12 +97,12 @@ func (e *DBEntryPoint[T]) Main() {
 	}
 
 	if e.config.GetMeta().IsProdlike() {
-		logger.Debug("using database", slog.String("dsn", conn.CreateLoggingDSN()))
+		logger.Debug("using database", log.String("dsn", conn.CreateLoggingDSN()))
 	}
 
 	if e.flagStart && e.Start != nil {
 		if err := e.Start(ctx, e.config, conn); err != nil {
-			cliutil.Fatal(err)
+			cliutil.MaybeFatal(err)
 		}
 	}
 }

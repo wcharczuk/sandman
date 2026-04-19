@@ -60,7 +60,7 @@ func (e *EntryPoint[T]) Main() {
 	if e.flagSetup && e.Setup != nil {
 		logger.Info("running first time setup")
 		if err := e.Setup(ctx, e.config); err != nil {
-			cliutil.Fatal(err)
+			cliutil.MaybeFatal(err)
 		}
 		logger.Info("running first time setup complete")
 	} else {
@@ -69,7 +69,7 @@ func (e *EntryPoint[T]) Main() {
 	if e.flagStart && e.Start != nil {
 		logger.Info("starting")
 		if err := e.Start(ctx, e.config); err != nil {
-			cliutil.Fatal(err)
+			cliutil.MaybeFatal(err)
 		}
 	} else {
 		logger.Info("exiting")

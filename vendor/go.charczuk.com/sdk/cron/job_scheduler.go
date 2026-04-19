@@ -310,12 +310,12 @@ func (js *JobScheduler) setCurrent(ji *JobInvocation) {
 	js.currentLock.Unlock()
 }
 
-// SetLast sets the last invocation, it is useful for tests etc.
-func (js *JobScheduler) setLast(ji *JobInvocation) {
-	js.lastLock.Lock()
-	js.last = ji
-	js.lastLock.Unlock()
-}
+// // SetLast sets the last invocation, it is useful for tests etc.
+// func (js *JobScheduler) setLast(ji *JobInvocation) {
+// 	js.lastLock.Lock()
+// 	js.last = ji
+// 	js.lastLock.Unlock()
+// }
 
 func (js *JobScheduler) onRegister(ctx context.Context) error {
 	ctx = js.withBaseContext(ctx)

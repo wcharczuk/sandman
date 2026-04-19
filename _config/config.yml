@@ -1,8 +1,12 @@
 grpc:
   bindAddr: :8833
 
+dbHosts:
+  - 127.0.0.1:26257
+  - 127.0.0.1:26258
+  - 127.0.0.1:26259
+
 db:
   database: sandman
-  port: 26257
   username: root
   sslMode: disable

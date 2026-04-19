@@ -74,7 +74,7 @@ func main() {
 	fmt.Printf("!! nodes dev starting\n")
 	fmt.Printf("!! you can force a restart of the sub-process tree with: kill -HUP %d\n", os.Getpid())
 	if err := graceful.StartForShutdown(context.Background(), s); err != nil {
-		cliutil.Fatal(err)
+		cliutil.MaybeFatal(err)
 	}
 }
 

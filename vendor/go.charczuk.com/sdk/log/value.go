@@ -293,8 +293,21 @@ func (v Value) String() string {
 	return string(v.append(buf))
 }
 
+// JSON returns Value's value as a JSON formatted string.
+func (v Value) JSON() string {
+	if sp, ok := v.any.(stringptr); ok {
+		return "\"" + unsafe.String(sp, v.num) + "\""
+	}
+	var buf []byte
+	return string(v.appendJSON(buf))
+}
+
 func (v Value) str() string {
 	return unsafe.String(v.any.(stringptr), v.num)
+}
+
+func (v Value) jsonStr() string {
+	return "\"" + unsafe.String(v.any.(stringptr), v.num) + "\""
 }
 
 // Int64 returns v's value as an int64. It panics
@@ -435,7 +448,7 @@ func (v Value) isEmptyGroup() bool {
 func (v Value) append(dst []byte) []byte {
 	switch v.Kind() {
 	case ValueKindString:
-		return append(dst, v.str()...)
+		return append(dst, v.jsonStr()...)
 	case ValueKindInt64:
 		return strconv.AppendInt(dst, int64(v.num), 10)
 	case ValueKindUint64:
@@ -453,7 +466,34 @@ func (v Value) append(dst []byte) []byte {
 	case ValueKindAny, ValueKindLogValuer:
 		return fmt.Append(dst, v.any)
 	default:
-		panic(fmt.Sprintf("bad kind: %s", v.Kind()))
+		return dst
+	}
+}
+
+// append appends a text representation of v to dst.
+// v is formatted as with fmt.Sprint.
+func (v Value) appendJSON(dst []byte) []byte {
+	switch v.Kind() {
+	case ValueKindString:
+		return append(dst, v.str()...)
+	case ValueKindInt64:
+		return strconv.AppendInt(dst, int64(v.num), 10)
+	case ValueKindUint64:
+		return strconv.AppendUint(dst, v.num, 10)
+	case ValueKindFloat64:
+		return strconv.AppendFloat(dst, v.float(), 'g', -1, 64)
+	case ValueKindBool:
+		return strconv.AppendBool(dst, v.bool())
+	case ValueKindDuration:
+		return append(dst, "\""+v.duration().String()+"\""...)
+	case ValueKindTime:
+		return append(dst, "\""+v.time().String()+"\""...)
+	case ValueKindGroup:
+		return fmt.Append(dst, v.group())
+	case ValueKindAny, ValueKindLogValuer:
+		return fmt.Append(dst, v.any)
+	default:
+		return dst
 	}
 }
 

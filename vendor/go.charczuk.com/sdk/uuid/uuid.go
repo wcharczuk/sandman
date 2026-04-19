@@ -44,6 +44,11 @@ func (uuid UUID) ShortString() string {
 	return hex.EncodeToString([]byte(uuid[:8]))
 }
 
+// LastShortString returns the last 8 bytes of the uuid as a hex string.
+func (uuid UUID) LastShortString() string {
+	return hex.EncodeToString([]byte(uuid[8:]))
+}
+
 // Version returns the version byte of a uuid.
 func (uuid UUID) Version() byte {
 	return uuid[6] >> 4

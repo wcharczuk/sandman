@@ -18,16 +18,25 @@ type Controller struct {
 	Scaler Scaler
 }
 
-// Run starts the control loop, evaluating desired scale every EvaluationInterval.
+// Run starts the control loop, evaluating desired scale every EvaluationInterval
+// and sweeping delivered/exhausted timers every CullInterval on a separate ticker
+// so neither operation can delay the other.
 func (c *Controller) Run(ctx context.Context) error {
 	logger := log.GetLogger(ctx)
 	evalInterval := c.Config.EvaluationIntervalOrDefault()
+	cullInterval := c.Config.CullIntervalOrDefault()
+	cullRetention := c.Config.CullRetentionOrDefault()
 	logger.Info("controller starting",
 		log.Duration("evaluation_interval", evalInterval),
 		log.Int("min_replicas", int(c.Config.MinReplicasOrDefault())),
 		log.Int("worker_batch_size", c.Config.WorkerBatchSizeOrDefault()),
 		log.Duration("worker_polling_interval", c.Config.WorkerPollingIntervalOrDefault()),
+		log.Duration("cull_interval", cullInterval),
+		log.Duration("cull_retention", cullRetention),
 	)
+
+	go c.runCullLoop(ctx, cullInterval, cullRetention)
+
 	c.evaluate(ctx)
 	tick := time.NewTicker(evalInterval)
 	defer tick.Stop()
@@ -38,6 +47,36 @@ func (c *Controller) Run(ctx context.Context) error {
 		case <-tick.C:
 			c.evaluate(ctx)
 		}
+	}
+}
+
+func (c *Controller) runCullLoop(ctx context.Context, interval, retention time.Duration) {
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+	c.cull(ctx, retention)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			c.cull(ctx, retention)
+		}
+	}
+}
+
+func (c *Controller) cull(ctx context.Context, retention time.Duration) {
+	logger := log.GetLogger(ctx)
+	cutoff := time.Now().UTC().Add(-retention)
+	rowsAffected, err := c.Model.CullTimers(ctx, cutoff)
+	if err != nil {
+		logger.Error("controller; cull failed", log.Any("err", err))
+		return
+	}
+	if rowsAffected > 0 {
+		logger.Info("controller; cull complete",
+			log.Int("rows_deleted", int(rowsAffected)),
+			log.Time("cutoff", cutoff),
+		)
 	}
 }
 

@@ -10,6 +10,6 @@ import (
 
 func main() {
 	if err := commands.Root().Run(context.Background(), os.Args); err != nil {
-		cliutil.Fatal(err)
+		cliutil.MaybeFatal(err)
 	}
 }

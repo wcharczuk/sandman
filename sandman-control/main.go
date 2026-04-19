@@ -27,6 +27,8 @@ var (
 	flagEvaluationInterval = flag.Duration("evaluation-interval", 0, "How often to evaluate desired scale")
 	flagMinReplicas        = flag.Int("min-replicas", 0, "Minimum number of worker replicas")
 	flagMaxReplicas        = flag.Int("max-replicas", 0, "Maximum number of worker replicas (0 = unlimited)")
+	flagCullInterval       = flag.Duration("cull-interval", 0, "How often to sweep delivered/exhausted timers")
+	flagCullRetention      = flag.Duration("cull-retention", 0, "How long past due_utc a delivered timer is kept before cull")
 	flagNamespace          = flag.String("namespace", "", "Kubernetes namespace (k8s mode)")
 	flagDeployment         = flag.String("deployment", "", "Deployment name to scale (k8s mode)")
 	flagLeaseName          = flag.String("lease-name", "", "Lease name for leader election (k8s mode)")
@@ -40,6 +42,8 @@ type controlConfig struct {
 	EvaluationInterval time.Duration     `yaml:"evaluation_interval"`
 	MinReplicas        int               `yaml:"min_replicas"`
 	MaxReplicas        int               `yaml:"max_replicas"`
+	CullInterval       time.Duration     `yaml:"cull_interval"`
+	CullRetention      time.Duration     `yaml:"cull_retention"`
 	K8s                control.K8sConfig `yaml:"k8s"`
 }
 
@@ -50,6 +54,8 @@ func (c *controlConfig) Resolve(ctx context.Context) error {
 		configutil.Set(&c.EvaluationInterval, configutil.Lazy(flagEvaluationInterval), configutil.Env[time.Duration]("EVALUATION_INTERVAL")),
 		configutil.Set(&c.MinReplicas, configutil.Lazy(flagMinReplicas), configutil.Env[int]("MIN_REPLICAS")),
 		configutil.Set(&c.MaxReplicas, configutil.Lazy(flagMaxReplicas), configutil.Env[int]("MAX_REPLICAS")),
+		configutil.Set(&c.CullInterval, configutil.Lazy(flagCullInterval), configutil.Env[time.Duration]("CULL_INTERVAL")),
+		configutil.Set(&c.CullRetention, configutil.Lazy(flagCullRetention), configutil.Env[time.Duration]("CULL_RETENTION")),
 		configutil.Set(&c.K8s.Namespace, configutil.Lazy(flagNamespace), configutil.Env[string]("POD_NAMESPACE")),
 		configutil.Set(&c.K8s.Deployment, configutil.Lazy(flagDeployment), configutil.Env[string]("DEPLOYMENT_NAME")),
 		configutil.Set(&c.K8s.LeaseName, configutil.Lazy(flagLeaseName), configutil.Env[string]("LEASE_NAME"), configutil.Const("sandman-control")),
@@ -85,6 +91,8 @@ var entrypoint = apputil.DBEntryPoint[controlConfig]{
 			MaxReplicas:           int32(cfg.MaxReplicas),
 			WorkerBatchSize:       cfg.Worker.BatchSizeOrDefault(),
 			WorkerPollingInterval: cfg.Worker.PollingIntervalOrDefault(),
+			CullInterval:          cfg.CullInterval,
+			CullRetention:         cfg.CullRetention,
 		}
 
 		logger := log.GetLogger(ctx)

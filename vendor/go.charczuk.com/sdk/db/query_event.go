@@ -56,7 +56,7 @@ func (e QueryEvent) Attrs() (attrs []log.Attr) {
 		attrs = append(attrs, log.String("label", e.Label))
 	}
 	if len(e.Body) > 0 {
-		attrs = append(attrs, log.String("body", `"`+stringutil.CompressSpace(e.Body)+`"`))
+		attrs = append(attrs, log.String("body", stringutil.CompressSpace(e.Body)))
 	}
 	if len(e.Engine) > 0 {
 		attrs = append(attrs, log.String("engine", e.Engine))

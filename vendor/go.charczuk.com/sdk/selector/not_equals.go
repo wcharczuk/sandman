@@ -15,6 +15,16 @@ func (ne NotEquals) Matches(labels Labels) bool {
 	return true
 }
 
+// MatchesIter returns the selector result.
+func (ne NotEquals) MatchesIter(labelsIterator Iterator) bool {
+	for key, value := range labelsIterator {
+		if key == ne.Key {
+			return ne.Value != value
+		}
+	}
+	return true
+}
+
 // Validate validates the selector.
 func (ne NotEquals) Validate() (err error) {
 	err = CheckKey(ne.Key)

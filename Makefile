@@ -1,5 +1,11 @@
 PREFIX ?= $(shell pwd)
 
+# `make db` only needs a single live mikoshi node for the DROP/CREATE DDL
+# (cluster-wide DDL propagates from any node). Override if this one is
+# down: `make db MIKOSHI_HOST=127.0.0.1:26258`. The running services read
+# the full `dbHosts` list from _config/config.yml and don't use this.
+MIKOSHI_HOST ?= 127.0.0.1:26257
+
 init: ensure-protoc-gen-go ensure-protoc-gen-go-grpc
 
 ensure-protoc-gen-go:
@@ -18,8 +24,8 @@ load-test:
 	@go run scripts/load_test/main.go
 
 db:
-	@mikoshi sql --insecure --execute="drop database if exists sandman"
-	@mikoshi sql --insecure --execute="create database sandman"
+	@mikoshi sql --insecure --host=$(MIKOSHI_HOST) --execute="drop database if exists sandman"
+	@mikoshi sql --insecure --host=$(MIKOSHI_HOST) --execute="create database sandman"
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run sandman-worker/main.go -db-migrate -start=false
 
 migrate:

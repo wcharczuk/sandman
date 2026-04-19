@@ -13,5 +13,5 @@ The binary format can be substantially faster, which is what the pgx interface u
 
 import (
 	// the default driver is the stdlib version of pgx
-	_ "github.com/jackc/pgx/v4/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )

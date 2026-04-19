@@ -6,7 +6,7 @@ import (
 )
 
 // WriteGob marshalls an object to gob.
-func WriteGob(w http.ResponseWriter, statusCode int, response interface{}) error {
+func WriteGob(w http.ResponseWriter, statusCode int, response any) error {
 	w.Header().Set(HeaderContentType, ContentTypeApplicationGob)
 	w.WriteHeader(statusCode)
 	return gob.NewEncoder(w).Encode(response)

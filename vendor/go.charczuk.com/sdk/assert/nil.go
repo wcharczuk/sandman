@@ -1,19 +1,24 @@
 package assert
 
-import "reflect"
+import "testing"
 
-// Nil returns if a given reference is nil, but also returning true
-// if the reference is a valid typed pointer to nil, which may not strictly
-// be equal to nil.
-func Nil(object any) bool {
-	if object == nil {
-		return true
+// Nil is an assertion helper.
+//
+// It will test that the given value is nil, printing
+// the value if the value has a string form.
+func Nil(t *testing.T, v any, message ...any) {
+	t.Helper()
+	if !ReferenceIsNil(v) {
+		Fatalf(t, "expected value to be <nil>, was %v", []any{v}, message)
 	}
+}
 
-	value := reflect.ValueOf(object)
-	kind := value.Kind()
-	if kind >= reflect.Chan && kind <= reflect.Slice && value.IsNil() {
-		return true
+// NotNil is an assertion helper.
+//
+// It will test that the given value is not nil.
+func NotNil(t *testing.T, v any, message ...any) {
+	t.Helper()
+	if ReferenceIsNil(v) {
+		Fatalf(t, "expected value to not be <nil>", nil, message)
 	}
-	return false
 }

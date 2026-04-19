@@ -87,8 +87,14 @@ func (a Attr) Equal(b Attr) bool {
 	return a.Key == b.Key && a.Value.Equal(b.Value)
 }
 
+// String returns the attr as a plaintext env (key=value) pair.
 func (a Attr) String() string {
 	return fmt.Sprintf("%s=%s", a.Key, a.Value)
+}
+
+// JSON returns the attr as a JSON key-value pair.
+func (a Attr) JSON() string {
+	return fmt.Sprintf("%q:%v", a.Key, a.Value.JSON())
 }
 
 // isEmpty reports whether a has an empty key and a nil value.
@@ -128,16 +134,4 @@ func argsToAttr(args []any) ([]Attr, []any) {
 // AttrProvider is a provider for attrs.
 type AttrProvider interface {
 	Attrs() []Attr
-}
-
-// countAttrs returns the number of Attrs that would be created from args.
-func countAttrs(args []any) int {
-	n := 0
-	for i := 0; i < len(args); i++ {
-		n++
-		if _, ok := args[i].(string); ok {
-			i++
-		}
-	}
-	return n
 }

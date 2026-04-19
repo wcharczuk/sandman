@@ -1,10 +1,15 @@
 package selector
 
-// Any matches everything
+// Any matches everything.
 type Any struct{}
 
-// Matches returns true
+// Matches returns true.
 func (a Any) Matches(labels Labels) bool {
+	return true
+}
+
+// MatchesIter returns true.
+func (a Any) MatchesIter(i Iterator) bool {
 	return true
 }
 

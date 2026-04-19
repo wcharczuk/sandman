@@ -19,7 +19,7 @@ func Interceptors[T, V any](interceptors ...Interceptor[T, V]) Interceptor[T, V]
 		if b == nil {
 			return a
 		}
-		return InterceptorFunc[T, V](func(i Actioner[T, V]) Actioner[T, V] {
+		return InterceptorFunc[T, V](func(i Action[T, V]) Action[T, V] {
 			return b.Intercept(a.Intercept(i))
 		})
 	}
@@ -32,7 +32,7 @@ func Interceptors[T, V any](interceptors ...Interceptor[T, V]) Interceptor[T, V]
 
 // Interceptor returns an actioner for a given actioner.
 type Interceptor[T, V any] interface {
-	Intercept(action Actioner[T, V]) Actioner[T, V]
+	Intercept(action Action[T, V]) Action[T, V]
 }
 
 var (
@@ -40,9 +40,9 @@ var (
 )
 
 // InterceptorFunc is a function that implements action.
-type InterceptorFunc[T, V any] func(Actioner[T, V]) Actioner[T, V]
+type InterceptorFunc[T, V any] func(Action[T, V]) Action[T, V]
 
 // Intercept implements Interceptor for the function.
-func (fn InterceptorFunc[T, V]) Intercept(action Actioner[T, V]) Actioner[T, V] {
+func (fn InterceptorFunc[T, V]) Intercept(action Action[T, V]) Action[T, V] {
 	return fn(action)
 }

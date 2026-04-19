@@ -22,6 +22,12 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 						dbgen.Index(Worker{}, "last_seen_utc"),
 					),
 				),
+				migration.NewGroupWithStep(
+					migration.IndexNotExists("timers", "ix_timers_due_utc_pending"),
+					migration.Statements(
+						`CREATE INDEX ix_timers_due_utc_pending ON timers (due_utc) WHERE delivered_utc IS NULL AND attempt < 5`,
+					),
+				),
 			),
 		)...,
 	)

@@ -15,6 +15,16 @@ func (e Equals) Matches(labels Labels) bool {
 	return false
 }
 
+// MatchesIter returns the selector result.
+func (e Equals) MatchesIter(labelsIterator Iterator) bool {
+	for key, value := range labelsIterator {
+		if key == e.Key {
+			return e.Value == value
+		}
+	}
+	return false
+}
+
 // Validate validates the selector.
 func (e Equals) Validate() (err error) {
 	err = CheckKey(e.Key)

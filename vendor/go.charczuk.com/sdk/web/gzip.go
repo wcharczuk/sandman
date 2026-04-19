@@ -9,14 +9,15 @@ import (
 func GZip(action Action) Action {
 	return func(r Context) Result {
 		if HeaderAny(r.Request().Header, HeaderAcceptEncoding, ContentEncodingGZIP) {
-			r.Response().Header().Set(HeaderContentEncoding, ContentEncodingGZIP)
-			r.Response().Header().Set(HeaderVary, HeaderAcceptEncoding)
+			gzrw := NewGZipResponseWriter(r.Response())
+			gzrw.Header().Set(HeaderContentEncoding, ContentEncodingGZIP)
+			gzrw.Header().Set(HeaderVary, HeaderAcceptEncoding)
 			return action(&baseContext{
 				app:         r.App(),
 				req:         r.Request(),
 				route:       r.Route(),
 				routeParams: r.RouteParams(),
-				res:         NewGZipResponseWriter(r.Response()),
+				res:         gzrw,
 			})
 		}
 		return action(r)
@@ -57,10 +58,13 @@ func (crw *GZipResponseWriter) InnerResponse() http.ResponseWriter {
 }
 
 // Write writes the byes to the stream.
-func (crw *GZipResponseWriter) Write(b []byte) (int, error) {
-	_, err := crw.gzipWriter.Write(b)
-	crw.contentLength += len(b)
-	return len(b), err
+func (crw *GZipResponseWriter) Write(b []byte) (n int, err error) {
+	n, err = crw.gzipWriter.Write(b)
+	if err != nil {
+		return
+	}
+	crw.contentLength += n
+	return
 }
 
 // Header returns the headers for the response.

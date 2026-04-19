@@ -55,8 +55,7 @@ func HeaderAny(headers http.Header, key, value string) bool {
 		if !strings.ContainsRune(rawHeaderValue, ',') {
 			return strings.TrimSpace(rawHeaderValue) == value
 		}
-		headerValues := strings.Split(rawHeaderValue, ",")
-		for _, headerValue := range headerValues {
+		for headerValue := range strings.SplitSeq(rawHeaderValue, ",") {
 			if strings.TrimSpace(headerValue) == value {
 				return true
 			}
@@ -69,7 +68,7 @@ func HeaderAny(headers http.Header, key, value string) bool {
 func Headers(from map[string]string) http.Header {
 	output := make(http.Header)
 	for key, value := range from {
-		output[key] = []string{value}
+		output[http.CanonicalHeaderKey(key)] = []string{value}
 	}
 	return output
 }

@@ -13,6 +13,16 @@ func (nhk NotHasKey) Matches(labels Labels) bool {
 	return true
 }
 
+// MatchesIter returns the selector result.
+func (nhk NotHasKey) MatchesIter(labelsIterator Iterator) bool {
+	for key := range labelsIterator {
+		if key == string(nhk) {
+			return false
+		}
+	}
+	return true
+}
+
 // Validate validates the selector.
 func (nhk NotHasKey) Validate() (err error) {
 	err = CheckKey(string(nhk))

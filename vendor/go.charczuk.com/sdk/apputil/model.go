@@ -48,7 +48,7 @@ func (m ModelManager) DeleteExpiredSessions(ctx context.Context, oldest time.Tim
 // NewTest returns a new test context.
 func NewTest(t *testing.T) (*ModelManager, func()) {
 	tx, err := testutil.DefaultDB().BeginTx(context.Background())
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	return NewModelManager(testutil.DefaultDB(), db.OptTx(tx)), func() {
 		_ = tx.Rollback()
 	}
@@ -57,13 +57,13 @@ func NewTest(t *testing.T) (*ModelManager, func()) {
 // CreateTestUser creates a test user.
 func CreateTestUser(t *testing.T, mgr *ModelManager) *User {
 	u0 := NewTestUser()
-	assert.ItsNil(t, mgr.Invoke(context.Background()).Create(&u0))
+	assert.Nil(t, mgr.Invoke(context.Background()).Create(&u0))
 	return &u0
 }
 
 // CreateTestSession creates a test session.
 func CreateTestSession(t *testing.T, mgr *ModelManager, user *User) *Session {
 	s0 := NewTestSession(user)
-	assert.ItsNil(t, mgr.Invoke(context.Background()).Create(&s0))
+	assert.Nil(t, mgr.Invoke(context.Background()).Create(&s0))
 	return &s0
 }

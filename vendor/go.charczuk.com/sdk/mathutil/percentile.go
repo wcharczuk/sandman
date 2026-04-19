@@ -3,7 +3,8 @@ package mathutil
 import "math"
 
 // Percentile finds the relative standing in a slice of floats.
-// `percent` should be given on the interval [0,100.0).
+//
+// The `percent` argument should be given on the interval [0,100.0).
 func Percentile[T Operatable](input []T, percent float64) (output T) {
 	if len(input) == 0 {
 		return
@@ -12,8 +13,9 @@ func Percentile[T Operatable](input []T, percent float64) (output T) {
 	return
 }
 
-// PercentileSorted finds the relative standing in a sorted slice of floats.
-// `percent` should be given on the interval [0,100.0).
+// PercentileSorted finds a relative standing in a sorted slice of floats.
+//
+// The `sortedInput` should be in ascending order, and the `percent` argument should be given on the interval [0,100.0)
 func PercentileSorted[T Operatable](sortedInput []T, percent float64) (percentile T) {
 	if len(sortedInput) == 0 {
 		return

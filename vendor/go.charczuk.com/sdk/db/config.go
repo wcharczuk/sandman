@@ -200,6 +200,13 @@ type Config struct {
 	BufferPoolSize int `json:"bufferPoolSize,omitempty" yaml:"bufferPoolSize,omitempty"`
 	// Dialect includes hints to tweak specific sql semantics by database connection.
 	Dialect string `json:"dialect,omitempty" yaml:"dialect,omitempty"`
+	// LoadBalanceHosts, when true and when `Host` contains multiple comma-separated
+	// `host:port` entries, shuffles the order pgx tries them on every new connection
+	// so that a pool opened against a multi-node cluster spreads sessions across
+	// nodes instead of always pinning to the first host. Only honored for the pgx
+	// engine; other drivers ignore it. Pair with `SetConnMaxLifetime` so long-lived
+	// pools periodically rebalance.
+	LoadBalanceHosts bool `json:"loadBalanceHosts,omitempty" yaml:"loadBalanceHosts,omitempty"`
 }
 
 // IsZero returns if the config is unset.

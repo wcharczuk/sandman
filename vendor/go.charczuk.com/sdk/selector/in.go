@@ -24,8 +24,29 @@ func (i In) Matches(labels Labels) bool {
 		}
 		return false
 	}
-	// in should be exclusive, that is
-	// we should fail if the in key isn't present
+	// `in` should be exclusive, that is
+	// we should fail if the in key isn't present in the labels
+	return false
+}
+
+// MatchesIter returns the selector result.
+func (i In) MatchesIter(labelsIterator Iterator) bool {
+	// if the labels has a given key
+	for key, value := range labelsIterator {
+		if key == i.Key {
+			// for each selector value
+			for _, iv := range i.Values {
+				// if they match, return true
+				if iv == value {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	// `in` should be exclusive, that is
+	// we should fail if the in key isn't present in the labels
 	return false
 }
 

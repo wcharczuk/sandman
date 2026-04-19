@@ -6,6 +6,9 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 // New returns a new Connection.
@@ -67,7 +70,7 @@ func (dbc *Connection) Open() error {
 		dbc.mc = make(map[string]*TypeMeta)
 	}
 
-	dbConn, err := sql.Open(dbc.Config.Engine, dbc.Config.CreateDSN())
+	dbConn, err := openSQLDB(dbc.Config)
 	if err != nil {
 		return err
 	}
@@ -82,6 +85,22 @@ func (dbc *Connection) Open() error {
 // Close implements a closer.
 func (dbc *Connection) Close() error {
 	return dbc.conn.Close()
+}
+
+// openSQLDB builds a *sql.DB from the Config. When the engine is pgx and
+// LoadBalanceHosts is enabled, it routes through the stdlib Connector so
+// the per-connection RandomizeHostOrderFunc hook is wired up; otherwise
+// it uses the standard sql.Open path.
+func openSQLDB(cfg Config) (*sql.DB, error) {
+	dsn := cfg.CreateDSN()
+	if cfg.Engine == "pgx" && cfg.LoadBalanceHosts {
+		connConfig, err := pgx.ParseConfig(dsn)
+		if err != nil {
+			return nil, err
+		}
+		return stdlib.OpenDB(*connConfig, stdlib.OptionBeforeConnect(stdlib.RandomizeHostOrderFunc)), nil
+	}
+	return sql.Open(cfg.Engine, dsn)
 }
 
 // TypeMeta returns the TypeMeta for an object.

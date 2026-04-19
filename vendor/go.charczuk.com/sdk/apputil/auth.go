@@ -89,7 +89,7 @@ func (a Auth) oauthGoogle(ctx web.Context) web.Result {
 		return ctx.Views().InternalError(err)
 	}
 	if len(result.State.RedirectURI) > 0 {
-		return web.RedirectWithMethodf(http.MethodGet, result.State.RedirectURI)
+		return web.RedirectWithMethod(http.MethodGet, result.State.RedirectURI)
 	}
 	return a.authedRedirect()
 }

@@ -124,7 +124,7 @@ func MockContext(method, path string) Context {
 func MockContextWithBuffer(method, path string, buf io.Writer) Context {
 	return &baseContext{
 		app: new(App),
-		res: NewMockResponse(buf),
+		res: NewMockResponseWriter(buf),
 		req: NewMockRequest(method, path),
 	}
 }
@@ -134,8 +134,8 @@ var (
 	_ http.Flusher        = (*MockResponseWriter)(nil)
 )
 
-// NewMockResponse returns a mocked response writer.
-func NewMockResponse(buffer io.Writer) *MockResponseWriter {
+// NewMockResponseWriter returns a mocked response writer.
+func NewMockResponseWriter(buffer io.Writer) *MockResponseWriter {
 	return &MockResponseWriter{
 		innerWriter: buffer,
 		contents:    new(bytes.Buffer),

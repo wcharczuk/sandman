@@ -3,12 +3,14 @@ package worker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"expvar"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.charczuk.com/sdk/async"
 	"go.charczuk.com/sdk/log"
 	"go.charczuk.com/sdk/uuid"
@@ -184,24 +186,87 @@ func (w *Worker) processTick(ctx context.Context) {
 	}
 }
 
-const bulkMarkDeliveredMaxRetries = 3
-const bulkMarkDeliveredTimeout = 10 * time.Second
+const dbWriteMaxRetries = 3
+const dbWriteTimeout = 10 * time.Second
 
-func (w *Worker) bulkMarkDeliveredWithRetry(ctx context.Context, ids []uuid.UUID) {
-	logger := log.GetLogger(ctx)
-	for attempt := range bulkMarkDeliveredMaxRetries {
-		markCtx, markCancel := context.WithTimeout(context.Background(), bulkMarkDeliveredTimeout)
-		err := w.mgr.BulkMarkDelivered(markCtx, time.Now().UTC(), ids)
-		markCancel()
-		if err == nil {
-			return
-		}
-		logger.Error("worker; failed to mark timers delivered",
-			log.Int("attempt", attempt+1),
-			log.Int("max_attempts", bulkMarkDeliveredMaxRetries),
-			log.Any("err", err),
-		)
+// retriableSQLStates are SQLSTATE codes that indicate the statement
+// should be re-run as-is: transient contention / serialization failures
+// with no application-level cause to fix first.
+var retriableSQLStates = map[string]struct{}{
+	"40001": {}, // serialization_failure
+	"40P01": {}, // deadlock_detected
+	"55P03": {}, // lock_not_available
+	"08006": {}, // connection_failure
+	"08003": {}, // connection_does_not_exist
+	"08001": {}, // sqlclient_unable_to_establish_sqlconnection
+	"57P01": {}, // admin_shutdown
+	"57P02": {}, // crash_shutdown
+	"57P03": {}, // cannot_connect_now
+}
+
+// isRetriableDBError reports whether err was produced by a condition
+// where re-running the same statement is the correct remedy: a known
+// transient SQLSTATE, a pgx connection-level "safe to retry" signal, or
+// our own per-attempt context deadline (the DB was slow, not wrong).
+// Anything else surfaces immediately so we don't burn retries on logic
+// or constraint errors.
+func isRetriableDBError(err error) bool {
+	if err == nil {
+		return false
 	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		_, ok := retriableSQLStates[pgErr.Code]
+		return ok
+	}
+	if pgconn.SafeToRetry(err) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	return false
+}
+
+// retryDBWrite runs fn up to dbWriteMaxRetries times, each with a fresh
+// per-attempt deadline sourced from context.Background() so retries can
+// outlive the caller's tick budget. Non-retriable errors are surfaced
+// immediately instead of burning remaining attempts on them. Returns
+// the final error (nil on success, otherwise the last attempt's err).
+func retryDBWrite(ctx context.Context, label string, fn func(context.Context) error) error {
+	logger := log.GetLogger(ctx)
+	var lastErr error
+	for attempt := range dbWriteMaxRetries {
+		writeCtx, cancel := context.WithTimeout(context.Background(), dbWriteTimeout)
+		lastErr = fn(writeCtx)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		retriable := isRetriableDBError(lastErr)
+		logger.Error(label,
+			log.Int("attempt", attempt+1),
+			log.Int("max_attempts", dbWriteMaxRetries),
+			log.Bool("retriable", retriable),
+			log.Any("err", lastErr),
+		)
+		if !retriable {
+			return lastErr
+		}
+	}
+	return lastErr
+}
+
+func (w *Worker) bulkMarkDeliveredWithRetry(ctx context.Context, ids []uuid.UUID) error {
+	return retryDBWrite(ctx, "worker; failed to mark timers delivered", func(c context.Context) error {
+		return w.mgr.BulkMarkDelivered(c, time.Now().UTC(), ids)
+	})
+}
+
+func (w *Worker) markAttemptedWithRetry(ctx context.Context, id uuid.UUID, statusCode uint32, remoteErr error, asOf time.Time) error {
+	return retryDBWrite(ctx, "worker; failed to mark attempted", func(c context.Context) error {
+		return w.mgr.MarkAttempted(c, id, statusCode, remoteErr, asOf)
+	})
 }
 
 func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() error {
@@ -236,13 +301,7 @@ func (w *Worker) processTickTimer(ctx context.Context, t *model.Timer) func() er
 					log.Duration("elapsed", time.Since(started)),
 				)...)
 			}
-			internalErr = w.mgr.MarkAttempted(ctx, t.ID, uint32(statusCode), remoteErr, time.Now().UTC())
-			if internalErr != nil {
-				log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to mark attempted: %w", internalErr), w.logAttrs(t,
-					log.String("err_type", "internal"),
-					log.Duration("elapsed", time.Since(started)),
-				)...)
-			}
+			internalErr = w.markAttemptedWithRetry(ctx, t.ID, uint32(statusCode), remoteErr, time.Now().UTC())
 			return nil
 		}
 
