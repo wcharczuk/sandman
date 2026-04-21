@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -95,6 +96,7 @@ func (w *Worker) Vars() WorkerVars {
 }
 
 func (w *Worker) Run(ctx context.Context) error {
+	defer w.deregister(ctx)
 	tick := time.NewTicker(w.tickIntervalOrDefault())
 	defer tick.Stop()
 	for {
@@ -108,6 +110,20 @@ func (w *Worker) Run(ctx context.Context) error {
 				w.processTick(deadlineCtx)
 			}()
 		}
+	}
+}
+
+// deregister removes this worker's row from the workers table on
+// graceful shutdown so peers can reclaim its shard band immediately
+// instead of waiting for last_seen_utc to age out. Uses a fresh
+// context.Background() with a short timeout because the Run ctx is
+// already cancelled by the time this runs; logger is retrieved from
+// the (now-cancelled) parent where it was originally attached.
+func (w *Worker) deregister(parent context.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := w.mgr.DeleteWorker(ctx, w.identity); err != nil {
+		log.GetLogger(parent).Error("worker; failed to deregister on shutdown", log.Any("err", err))
 	}
 }
 
@@ -155,7 +171,9 @@ func (w *Worker) processTick(ctx context.Context) {
 		return
 	}
 
-	timers, err := w.mgr.GetDueTimers(ctx, w.identity, nowUTC, w.batchSizeOrDefault())
+	shardLo, shardHi := w.currentShardBand(ctx, nowUTC)
+
+	timers, err := w.mgr.GetDueTimers(ctx, w.identity, nowUTC, w.batchSizeOrDefault(), shardLo, shardHi)
 	if err != nil {
 		log.GetLogger(ctx).Error("worker; failed to get timers", log.Any("err", err))
 		return
@@ -184,6 +202,50 @@ func (w *Worker) processTick(ctx context.Context) {
 		)
 		w.bulkMarkDeliveredWithRetry(ctx, deliveredIDs)
 	}
+}
+
+// shardStaleness is how recently a peer must have reported in to count
+// as part of the partitioning ring. Generous relative to the polling
+// interval so a transiently-slow worker doesn't drop out.
+const shardStaleness = 30 * time.Second
+
+// shardSpace is one past the max uint32 shard value; using uint64 so
+// the upper bound is expressible without overflow.
+const shardSpace uint64 = 1 << 32
+
+// currentShardBand computes the half-open [lo, hi) slice of the uint32
+// shard space this worker should poll this tick. Workers sort by
+// hostname and each claims its indexed slice of the space. If the
+// worker isn't yet in the visible set (first tick race, stale `workers`
+// read) we fall back to the whole space — SKIP LOCKED keeps that safe.
+func (w *Worker) currentShardBand(ctx context.Context, now time.Time) (uint64, uint64) {
+	peers, err := w.mgr.GetWorkers(ctx, now.Add(-shardStaleness))
+	if err != nil || len(peers) == 0 {
+		if err != nil {
+			log.GetLogger(ctx).Error("worker; failed to list peers for shard band", log.Any("err", err))
+		}
+		return 0, shardSpace
+	}
+	sort.Slice(peers, func(i, j int) bool { return peers[i].Hostname < peers[j].Hostname })
+	myIndex := -1
+	for i, p := range peers {
+		if p.Hostname == w.identity {
+			myIndex = i
+			break
+		}
+	}
+	if myIndex < 0 {
+		return 0, shardSpace
+	}
+	n := uint64(len(peers))
+	band := shardSpace / n
+	lo := uint64(myIndex) * band
+	hi := lo + band
+	// Last worker absorbs the remainder so the whole space is covered.
+	if myIndex == len(peers)-1 {
+		hi = shardSpace
+	}
+	return lo, hi
 }
 
 const dbWriteMaxRetries = 3

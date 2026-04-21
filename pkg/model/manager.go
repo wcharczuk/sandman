@@ -25,6 +25,7 @@ type Manager struct {
 	deleteTimerByName   *sql.Stmt
 	bulkMarkDelivered   *sql.Stmt
 	workerSeen          *sql.Stmt
+	deleteWorker          *sql.Stmt
 	getWorkers            *sql.Stmt
 	getPeakTimersDueCount *sql.Stmt
 	getOverdueTimerCount  *sql.Stmt
@@ -74,6 +75,11 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.workerSeen, err = m.Invoke(ctx).Prepare(execWorkerSeen)
 	if err != nil {
 		err = fmt.Errorf("workerSeen: %w", err)
+		return
+	}
+	m.deleteWorker, err = m.Invoke(ctx).Prepare(execDeleteWorker)
+	if err != nil {
+		err = fmt.Errorf("deleteWorker: %w", err)
 		return
 	}
 	m.getWorkers, err = m.Invoke(ctx).Prepare(queryGetWorkers)
@@ -177,9 +183,10 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 	SELECT
 		id, priority, shard, due_utc
 	FROM
-		%[1]s@ix_timers_due_utc_pending
+		%[1]s@ix_timers_shard_due_utc_pending
 	WHERE
-		due_utc < $2
+		shard >= $4 AND shard < $5
+		AND due_utc < $2
 		AND (
 			assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2)
 		)
@@ -188,7 +195,7 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		)
 		AND attempt < 5
 		AND delivered_utc IS NULL
-	ORDER BY due_utc ASC
+	ORDER BY shard ASC, due_utc ASC
 	LIMIT $3 * 2
 	FOR UPDATE SKIP LOCKED
 ), selected AS (
@@ -221,9 +228,14 @@ RETURNING %[2]s
 
 //
 
-func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int) (output []Timer, err error) {
+// GetDueTimers claims up to batchSize timers whose shard falls in
+// [shardLo, shardHi). The half-open range lets workers partition the
+// uint32 shard space cleanly: a worker that owns the whole space passes
+// (0, 1<<32). `FOR UPDATE SKIP LOCKED` still protects against two
+// workers briefly overlapping bands during a membership change.
+func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int, shardLo, shardHi uint64) (output []Timer, err error) {
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi)
 	if err != nil {
 		return
 	}
@@ -322,12 +334,22 @@ func (m Manager) DeleteTimers(ctx context.Context, after, before time.Time, matc
 	return err
 }
 
-const execWorkerSeen = `INSERT INTO workers (hostname, created_utc, last_seen_utc) 
+const execWorkerSeen = `INSERT INTO workers (hostname, created_utc, last_seen_utc)
 VALUES ($1, $2, $2) ON CONFLICT (hostname) DO UPDATE SET last_seen_utc = $2`
 
 func (m Manager) WorkerSeen(ctx context.Context, workerHostname string, ts time.Time) (err error) {
 	_, err = m.workerSeen.ExecContext(ctx, workerHostname, ts)
 	return
+}
+
+const execDeleteWorker = `DELETE FROM workers WHERE hostname = $1`
+
+// DeleteWorker removes a worker's row from the workers table. Called on
+// graceful shutdown so the departing worker's shard band is reclaimed
+// by peers on the next tick instead of waiting out the staleness window.
+func (m Manager) DeleteWorker(ctx context.Context, hostname string) error {
+	_, err := m.deleteWorker.ExecContext(ctx, hostname)
+	return err
 }
 
 var queryGetWorkers = fmt.Sprintf(`SELECT %s FROM workers WHERE last_seen_utc > $1`, db.ColumnNamesCSV(workerColumns))
