@@ -3,6 +3,7 @@ module sandman
 go 1.25.0
 
 require (
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/urfave/cli/v3 v3.0.0-alpha9.1
 	go.charczuk.com v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.67.1
@@ -17,7 +18,6 @@ require (
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/kr/text v0.1.0 // indirect
 	github.com/rjeczalik/notify v0.9.3 // indirect
