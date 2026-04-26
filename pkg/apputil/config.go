@@ -7,8 +7,6 @@ import (
 	"sandman/pkg/configutil"
 	"sandman/pkg/db"
 	"sandman/pkg/log"
-	"sandman/pkg/oauth"
-	"sandman/pkg/web"
 )
 
 var (
@@ -34,16 +32,8 @@ type MetaProvider interface {
 type Config struct {
 	configmeta.Meta `yaml:",inline"`
 
-	Logger log.Config   `yaml:"logger"`
-	OAuth  oauth.Config `yaml:"oauth"`
-	Web    web.Config   `yaml:"web"`
-	DB     db.Config    `yaml:"db"`
-}
-
-// ResolveOAuthRedirectURL resolves the oauth redirect url if it's not set.
-func (c *Config) ResolveOAuthRedirectURL(ctx context.Context) (*string, error) {
-	redirectURL := "http://localhost/oauth/google"
-	return &redirectURL, nil
+	Logger log.Config `yaml:"logger"`
+	DB     db.Config  `yaml:"db"`
 }
 
 // GetLogger returns the logger config.
@@ -72,12 +62,9 @@ func (c *Config) Resolve(ctx context.Context) (err error) {
 	return configutil.Resolve(ctx,
 		(&c.Meta).Resolve,
 		(&c.Logger).Resolve,
-		(&c.OAuth).Resolve,
-		(&c.Web).Resolve,
 		(&c.DB).Resolve,
-		configutil.Set(&c.ServiceName, configutil.Env[string]("SERVICE_NAME"), configutil.Lazy(&c.ServiceName), configutil.Const("kana-server")),
+		configutil.Set(&c.ServiceName, configutil.Env[string]("SERVICE_NAME"), configutil.Lazy(&c.ServiceName), configutil.Const("sandman")),
 		configutil.Set(&c.Version, configutil.Env[string]("VERSION"), configutil.Lazy(&c.Version), configutil.Lazy(&configmeta.Version)),
 		configutil.Set(&c.GitRef, configutil.Env[string]("GIT_REF"), configutil.Lazy(&c.GitRef), configutil.Lazy(&configmeta.GitRef)),
-		configutil.Set(&c.OAuth.RedirectURL, configutil.Lazy(&c.OAuth.RedirectURL), c.ResolveOAuthRedirectURL),
 	)
 }
