@@ -143,6 +143,15 @@ func (m Manager) Close() error {
 	if err := m.bulkMarkDelivered.Close(); err != nil {
 		return err
 	}
+	if err := m.workerSeen.Close(); err != nil {
+		return err
+	}
+	if err := m.deleteWorker.Close(); err != nil {
+		return err
+	}
+	if err := m.getWorkers.Close(); err != nil {
+		return err
+	}
 	if err := m.getPeakTimersDueCount.Close(); err != nil {
 		return err
 	}

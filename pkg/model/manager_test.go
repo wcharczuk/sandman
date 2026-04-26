@@ -18,7 +18,7 @@ import (
 func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -28,7 +28,7 @@ func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -44,7 +44,7 @@ func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:   "test-timer-01",
@@ -57,7 +57,7 @@ func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_not_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:   "test-timer-02",
@@ -71,7 +71,7 @@ func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 		Shard:      StableHash([]byte("uk_not_bufoco")),
 		Attempt:    5,
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:   "test-timer-03",
@@ -84,17 +84,17 @@ func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
-	assert.ItsNil(t, err)
-	assert.ItsEqual(t, 2, len(timers))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10, 0, 1<<32)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(timers))
 }
 
 func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -104,7 +104,7 @@ func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -121,7 +121,7 @@ func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:             "test-timer-01",
@@ -135,7 +135,7 @@ func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_not_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:             "test-timer-02",
@@ -150,7 +150,7 @@ func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 		Shard:      StableHash([]byte("uk_not_bufoco")),
 		Attempt:    5,
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:             "test-timer-03",
@@ -164,17 +164,17 @@ func Test_Manager_GetDueTimers_byAssignedUntilUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
-	assert.ItsNil(t, err)
-	assert.ItsEqual(t, 2, len(timers))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10, 0, 1<<32)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(timers))
 }
 
 func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -184,7 +184,7 @@ func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -201,7 +201,7 @@ func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:     "test-timer-01",
 		DueUTC:   now,
@@ -214,7 +214,7 @@ func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_not_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.Invoke(ctx).Create(&Timer{
 		Name:     "test-timer-02",
@@ -228,17 +228,17 @@ func Test_Manager_GetDueTimers_byRetryUTC(t *testing.T) {
 		CreatedUTC: now,
 		Shard:      StableHash([]byte("uk_bufoco")),
 	})
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10)
-	assert.ItsNil(t, err)
-	assert.ItsEqual(t, 2, len(timers))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 10, 0, 1<<32)
+	assert.Nil(t, err)
+	assert.Equal(t, 2, len(timers))
 }
 
 func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -248,7 +248,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -266,7 +266,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t00)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t01 := Timer{
 		Name:   "test-timer-01",
@@ -281,7 +281,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t01)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t02 := Timer{
 		Name:   "test-timer-02",
@@ -296,7 +296,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t02)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t03 := Timer{
 		Name:   "test-timer-03",
@@ -311,7 +311,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t03)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t04 := Timer{
 		Name:   "test-timer-04",
@@ -326,7 +326,7 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t04)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	asOf := now.Add(3 * time.Hour)
 	pseudoPriorities := []pseudoPriority{
@@ -346,17 +346,17 @@ func Test_Manager_GetDueTimers_ordersByShard(t *testing.T) {
 		return -1
 	})
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", asOf, 3)
-	assert.ItsNil(t, err)
-	assert.ItsEqual(t, 3, len(timers))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", asOf, 3, 0, 1<<32)
+	assert.Nil(t, err)
+	assert.Equal(t, 3, len(timers))
 
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
 
-	assert.ItsEqual(t, t01.ID, pseudoPriorities[0].ID)
-	assert.ItsEqual(t, t02.ID, pseudoPriorities[2].ID)
-	assert.ItsEqual(t, t03.ID, pseudoPriorities[1].ID)
+	assert.Equal(t, t01.ID, pseudoPriorities[0].ID)
+	assert.Equal(t, t02.ID, pseudoPriorities[2].ID)
+	assert.Equal(t, t03.ID, pseudoPriorities[1].ID)
 }
 
 type pseudoPriority struct {
@@ -389,7 +389,7 @@ func computePseudoPriority(asOf time.Time, t *Timer) (output pseudoPriority) {
 func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -399,7 +399,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -417,7 +417,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t00)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t01 := Timer{
 		Name:   "test-timer-01",
@@ -432,7 +432,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t01)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t02 := Timer{
 		Name:   "test-timer-02",
@@ -447,7 +447,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		Priority:   400000, // this means it's beyond the 360,000 maximum boost of shuffling
 	}
 	err = modelMgr.Invoke(ctx).Create(&t02)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t03 := Timer{
 		Name:   "test-timer-03",
@@ -462,7 +462,7 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t03)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	t04 := Timer{
 		Name:   "test-timer-04",
@@ -477,21 +477,21 @@ func Test_Manager_GetDueTimers_ordersByShard_boosted(t *testing.T) {
 		Priority:   10,
 	}
 	err = modelMgr.Invoke(ctx).Create(&t04)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
-	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 3)
-	assert.ItsNil(t, err)
-	assert.ItsEqual(t, 3, len(timers))
+	timers, err := modelMgr.GetDueTimers(ctx, "test-worker", now.Add(3*time.Hour), 3, 0, 1<<32)
+	assert.Nil(t, err)
+	assert.Equal(t, 3, len(timers))
 
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
-	assert.ItsAny(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t01.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t02.ID) })
+	assert.Any(t, timers, func(t Timer) bool { return t.ID.Equal(t03.ID) })
 }
 
 func Test_Manager_BulkMarkDelivered(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -501,7 +501,7 @@ func Test_Manager_BulkMarkDelivered(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	now := time.Date(2024, 10, 19, 20, 19, 18, 17, time.UTC)
@@ -519,7 +519,7 @@ func Test_Manager_BulkMarkDelivered(t *testing.T) {
 			CreatedUTC: now,
 		}
 		err = modelMgr.Invoke(ctx).Create(&timers[x])
-		assert.ItsNil(t, err)
+		assert.Nil(t, err)
 	}
 
 	var ids = []uuid.UUID{
@@ -536,32 +536,32 @@ func Test_Manager_BulkMarkDelivered(t *testing.T) {
 	}
 
 	err = modelMgr.BulkMarkDelivered(ctx, now.Add(time.Hour), ids)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	var verifyTimers []Timer
 	err = modelMgr.Invoke(ctx).All(&verifyTimers)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[0].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[1].ID) && t.DeliveredUTC == nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[2].ID) && t.DeliveredUTC == nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[3].ID) && t.DeliveredUTC == nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[4].ID) && t.DeliveredUTC == nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[5].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[10].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[15].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[20].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[25].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[30].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[35].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[40].ID) && t.DeliveredUTC != nil })
-	assert.ItsAny(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[45].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[0].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[1].ID) && t.DeliveredUTC == nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[2].ID) && t.DeliveredUTC == nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[3].ID) && t.DeliveredUTC == nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[4].ID) && t.DeliveredUTC == nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[5].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[10].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[15].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[20].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[25].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[30].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[35].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[40].ID) && t.DeliveredUTC != nil })
+	assert.Any(t, verifyTimers, func(t Timer) bool { return t.ID.Equal(timers[45].ID) && t.DeliveredUTC != nil })
 }
 
 func Test_Manager_WorkerSeen(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -571,39 +571,39 @@ func Test_Manager_WorkerSeen(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	ts := time.Now().UTC()
 	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	var workers []Worker
 
 	ts = ts.Add(time.Minute)
 	err = modelMgr.BaseManager.Invoke(ctx).All(&workers)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	assert.ItsLen(t, workers, 2)
 
 	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	var verify []Worker
 	err = modelMgr.BaseManager.Invoke(ctx).All(&verify)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	assert.ItsLen(t, workers, 2)
 }
 
 func Test_Manager_GetWorkers(t *testing.T) {
 	ctx := context.Background()
 	tx, err := testutil.DefaultDB().BeginTx(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer tx.Rollback()
 
 	modelMgr := &Manager{
@@ -613,20 +613,20 @@ func Test_Manager_GetWorkers(t *testing.T) {
 		),
 	}
 	err = modelMgr.Initialize(ctx)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	defer modelMgr.Close()
 
 	ts := time.Now().UTC()
 	err = modelMgr.WorkerSeen(ctx, "worker-00", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.WorkerSeen(ctx, "worker-01", ts)
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	err = modelMgr.WorkerSeen(ctx, "worker-02", ts.Add(-time.Minute))
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 
 	workers, err := modelMgr.GetWorkers(ctx, ts.Add(-30*time.Second))
-	assert.ItsNil(t, err)
+	assert.Nil(t, err)
 	assert.ItsLen(t, workers, 2)
 }
