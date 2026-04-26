@@ -209,9 +209,14 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 // queryGetDueTimers parameters:
 //   $1 = worker identity, $2 = asOf, $3 = batch size,
 //   $4 = shard low (inclusive), $5 = shard high (exclusive),
-//   $6 = window seconds (>=0): widen the "due" cutoff to asOf + window
-//        so callers can prefetch timers about to fire,
-//   $7 = lease seconds: how long the claim should be held.
+//   $6 = due_cutoff (= asOf + window): claim everything due before this,
+//   $7 = lease_until (= asOf + lease): how long the claim should be held.
+//
+// $6 and $7 are precomputed as timestamps in Go rather than derived
+// from $2 + interval inside SQL — pgx defaults numeric-cast placeholders
+// to text encoding under prepared statements, which CRDB rejects when
+// the surrounding context is interval arithmetic. Passing concrete
+// timestamps sidesteps that and keeps the query plan trivial.
 //
 // The shuffle-shard priority boost still uses asOf alone so the
 // per-tick fairness ordering is unchanged when window > 0.
@@ -222,7 +227,7 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		%[1]s@ix_timers_shard_due_utc_pending
 	WHERE
 		shard >= $4 AND shard < $5
-		AND due_utc < $2::timestamp + ($6 * interval '1 second')
+		AND due_utc < $6
 		AND (
 			assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2)
 		)
@@ -255,8 +260,8 @@ UPDATE %[1]s
 SET
 	assigned_worker = $1
 	, attempt = attempt + 1
-	, assigned_until_utc = $2::timestamp + ($7 * interval '1 second')
-	, retry_utc = $2 + interval '5 minutes'
+	, assigned_until_utc = $7
+	, retry_utc = $2::timestamp + interval '5 minutes'
 WHERE
 	id in (SELECT id FROM selected)
 RETURNING %[2]s
@@ -287,12 +292,18 @@ func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf t
 // windowSeconds=0 reproduces GetDueTimers' "due now" behavior; the lease
 // must always be positive so the partial-index reclaim path can still
 // recover unfired timers if this worker dies.
+//
+// dueCutoff and leaseUntil are derived as timestamps in Go and passed
+// directly so pgx never has to encode an integer placeholder used in
+// CRDB interval arithmetic — see the queryGetDueTimers comment.
 func (m Manager) GetDueTimersWindowed(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int, shardLo, shardHi uint64, windowSeconds, leaseSeconds int) (output []Timer, err error) {
 	if leaseSeconds <= 0 {
 		leaseSeconds = defaultLeaseSeconds
 	}
+	dueCutoff := asOf.Add(time.Duration(windowSeconds) * time.Second)
+	leaseUntil := asOf.Add(time.Duration(leaseSeconds) * time.Second)
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi, windowSeconds, leaseSeconds)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi, dueCutoff, leaseUntil)
 	if err != nil {
 		return
 	}
