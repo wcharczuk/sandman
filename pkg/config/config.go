@@ -54,6 +54,13 @@ func (c *Config) Resolve(ctx context.Context) error {
 type WorkerConfig struct {
 	BatchSize       int           `yaml:"batch_size"`
 	PollingInterval time.Duration `yaml:"polling_interval"`
+	// PrefetchWindow turns on wheel-mode dispatch. Zero (default)
+	// keeps the original "claim due now, fire, mark delivered" tick
+	// loop. Anything > 0 swaps in three loops (prefetch, dispatch,
+	// flush) keyed off an in-memory hash wheel.
+	PrefetchWindow       time.Duration `yaml:"prefetch_window"`
+	DispatchTickInterval time.Duration `yaml:"dispatch_tick_interval"`
+	FlushInterval        time.Duration `yaml:"flush_interval"`
 }
 
 const (

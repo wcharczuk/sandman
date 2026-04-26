@@ -21,6 +21,8 @@ type Manager struct {
 	getTimersDueBetween *sql.Stmt
 	cullTimers          *sql.Stmt
 	markAttempted       *sql.Stmt
+	bulkMarkAttempted   *sql.Stmt
+	bulkRelinquish      *sql.Stmt
 	deleteTimerByID     *sql.Stmt
 	deleteTimerByName   *sql.Stmt
 	bulkMarkDelivered   *sql.Stmt
@@ -55,6 +57,16 @@ func (m *Manager) Initialize(ctx context.Context) (err error) {
 	m.markAttempted, err = m.Invoke(ctx).Prepare(execMarkAttempted)
 	if err != nil {
 		err = fmt.Errorf("markAttempted: %w", err)
+		return
+	}
+	m.bulkMarkAttempted, err = m.Invoke(ctx).Prepare(execBulkMarkAttempted)
+	if err != nil {
+		err = fmt.Errorf("bulkMarkAttempted: %w", err)
+		return
+	}
+	m.bulkRelinquish, err = m.Invoke(ctx).Prepare(execBulkRelinquish)
+	if err != nil {
+		err = fmt.Errorf("bulkRelinquish: %w", err)
 		return
 	}
 	m.deleteTimerByID, err = m.Invoke(ctx).Prepare(execDeleteTimerByID)
@@ -122,6 +134,12 @@ func (m Manager) Close() error {
 	if err := m.markAttempted.Close(); err != nil {
 		return err
 	}
+	if err := m.bulkMarkAttempted.Close(); err != nil {
+		return err
+	}
+	if err := m.bulkRelinquish.Close(); err != nil {
+		return err
+	}
 	if err := m.bulkMarkDelivered.Close(); err != nil {
 		return err
 	}
@@ -179,6 +197,15 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	return
 }
 
+// queryGetDueTimers parameters:
+//   $1 = worker identity, $2 = asOf, $3 = batch size,
+//   $4 = shard low (inclusive), $5 = shard high (exclusive),
+//   $6 = window seconds (>=0): widen the "due" cutoff to asOf + window
+//        so callers can prefetch timers about to fire,
+//   $7 = lease seconds: how long the claim should be held.
+//
+// The shuffle-shard priority boost still uses asOf alone so the
+// per-tick fairness ordering is unchanged when window > 0.
 var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 	SELECT
 		id, priority, shard, due_utc
@@ -186,7 +213,7 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		%[1]s@ix_timers_shard_due_utc_pending
 	WHERE
 		shard >= $4 AND shard < $5
-		AND due_utc < $2
+		AND due_utc < $2::timestamp + ($6 * interval '1 second')
 		AND (
 			assigned_until_utc IS NULL OR (assigned_until_utc IS NOT NULL AND assigned_until_utc < $2)
 		)
@@ -219,7 +246,7 @@ UPDATE %[1]s
 SET
 	assigned_worker = $1
 	, attempt = attempt + 1
-	, assigned_until_utc = $2::timestamp + interval '1 minute'
+	, assigned_until_utc = $2::timestamp + ($7 * interval '1 second')
 	, retry_utc = $2 + interval '5 minutes'
 WHERE
 	id in (SELECT id FROM selected)
@@ -228,14 +255,35 @@ RETURNING %[2]s
 
 //
 
+// defaultLeaseSeconds matches the original 1-minute claim window used by
+// the legacy non-windowed path. Wheel-mode callers pass an explicit
+// lease covering windowSeconds + safety margin via GetDueTimersWindowed.
+const defaultLeaseSeconds = 60
+
 // GetDueTimers claims up to batchSize timers whose shard falls in
 // [shardLo, shardHi). The half-open range lets workers partition the
 // uint32 shard space cleanly: a worker that owns the whole space passes
 // (0, 1<<32). `FOR UPDATE SKIP LOCKED` still protects against two
 // workers briefly overlapping bands during a membership change.
+//
+// This is the legacy "due now" entry point — equivalent to
+// GetDueTimersWindowed with windowSeconds=0 and the default lease.
 func (m Manager) GetDueTimers(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int, shardLo, shardHi uint64) (output []Timer, err error) {
+	return m.GetDueTimersWindowed(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi, 0, defaultLeaseSeconds)
+}
+
+// GetDueTimersWindowed is the wheel-mode claim path. Callers can ask for
+// timers due any time before asOf+windowSeconds and set the lease to
+// cover the full window plus a safety margin (e.g. windowSeconds + 30).
+// windowSeconds=0 reproduces GetDueTimers' "due now" behavior; the lease
+// must always be positive so the partial-index reclaim path can still
+// recover unfired timers if this worker dies.
+func (m Manager) GetDueTimersWindowed(ctx context.Context, workerIdentity string, asOf time.Time, batchSize int, shardLo, shardHi uint64, windowSeconds, leaseSeconds int) (output []Timer, err error) {
+	if leaseSeconds <= 0 {
+		leaseSeconds = defaultLeaseSeconds
+	}
 	var rows *sql.Rows
-	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi)
+	rows, err = m.getDueTimers.QueryContext(ctx, workerIdentity, asOf, batchSize, shardLo, shardHi, windowSeconds, leaseSeconds)
 	if err != nil {
 		return
 	}
@@ -264,13 +312,13 @@ func (m Manager) CullTimers(ctx context.Context, cutoff time.Time) (rowsAffected
 	return
 }
 
-var execMarkAttempted = fmt.Sprintf(`UPDATE %s 
-SET 
+var execMarkAttempted = fmt.Sprintf(`UPDATE %s
+SET
 	delivered_status_code = $2
 	, delivered_err = $3
 	, retry_utc = $4::timestamp + interval '5 minutes'
 	, assigned_until_utc = NULL
-WHERE 
+WHERE
 	id = $1
 	AND attempt < 5
 `, timerTableName)
@@ -281,6 +329,61 @@ func (m Manager) MarkAttempted(ctx context.Context, id uuid.UUID, deliveredStatu
 		deliveredErrString = deliveredErr.Error()
 	}
 	_, err = m.markAttempted.ExecContext(ctx, id, deliveredStatus, deliveredErrString, asOf)
+	return
+}
+
+// execBulkMarkAttempted records identical (status, err) for a batch of
+// timer IDs. The dispatcher coalesces failures by (status_code, err_msg)
+// so the wheel-mode flush loop can write one row per failure family
+// instead of one per timer; the per-timer execMarkAttempted above is
+// preserved for the legacy single-shot tick path.
+var execBulkMarkAttempted = fmt.Sprintf(`UPDATE %s
+SET
+	delivered_status_code = $1
+	, delivered_err = $2
+	, retry_utc = $3::timestamp + interval '5 minutes'
+	, assigned_until_utc = NULL
+WHERE
+	id = ANY($4)
+	AND attempt < 5
+`, timerTableName)
+
+func (m Manager) BulkMarkAttempted(ctx context.Context, deliveredStatus uint32, deliveredErr error, asOf time.Time, ids []uuid.UUID) (err error) {
+	if len(ids) == 0 {
+		return
+	}
+	var deliveredErrString string
+	if deliveredErr != nil {
+		deliveredErrString = deliveredErr.Error()
+	}
+	_, err = m.bulkMarkAttempted.ExecContext(ctx, deliveredStatus, deliveredErrString, asOf, ids)
+	return
+}
+
+// execBulkRelinquish drops the worker's claim on a batch of timers
+// without recording an attempt. Used on graceful shutdown so peers can
+// reclaim un-fired wheel contents on the next tick instead of waiting
+// out the assigned_until_utc lease. Only relinquishes timers whose
+// claim is still held (assigned_until_utc in the future) to avoid
+// stomping a peer that already reclaimed them after our lease expired.
+var execBulkRelinquish = fmt.Sprintf(`UPDATE %s
+SET
+	assigned_worker = NULL
+	, assigned_until_utc = NULL
+	, attempt = GREATEST(attempt - 1, 0)
+WHERE
+	id = ANY($1)
+	AND assigned_worker = $2
+	AND assigned_until_utc IS NOT NULL
+	AND assigned_until_utc > $3
+	AND delivered_utc IS NULL
+`, timerTableName)
+
+func (m Manager) BulkRelinquish(ctx context.Context, workerIdentity string, asOf time.Time, ids []uuid.UUID) (err error) {
+	if len(ids) == 0 {
+		return
+	}
+	_, err = m.bulkRelinquish.ExecContext(ctx, ids, workerIdentity, asOf)
 	return
 }
 

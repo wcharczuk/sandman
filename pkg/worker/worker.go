@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,6 +19,7 @@ import (
 
 	"sandman/pkg/model"
 	"sandman/pkg/utils"
+	"sandman/pkg/wheel"
 )
 
 // New returns a new worker.
@@ -59,6 +61,38 @@ func OptBatchSize(batchSize int) WorkerOption {
 	}
 }
 
+// OptPrefetchWindow turns on wheel-mode dispatch. Each prefetch claims
+// every timer due within the next `window` and parks them in an in-
+// memory hash wheel; a 1-second dispatch loop drains the wheel and a
+// flush loop batches DB writes. Zero (the default) keeps the legacy
+// single-loop "claim due now, fire, mark delivered" behavior.
+//
+// The prefetch query widens its lease to window+leaseSafetyMargin so
+// the worker can hold a timer in the wheel for the full window without
+// the row aging back into the reclaim path. Setting window larger than
+// the wheel's slot count is a configuration error and will be clamped.
+func OptPrefetchWindow(window time.Duration) WorkerOption {
+	return func(w *Worker) {
+		w.prefetchWindow = window
+	}
+}
+
+// OptDispatchTickInterval overrides the wheel-mode dispatch cadence.
+// Defaults to 1s; only meaningful when OptPrefetchWindow > 0.
+func OptDispatchTickInterval(d time.Duration) WorkerOption {
+	return func(w *Worker) {
+		w.dispatchTickInterval = d
+	}
+}
+
+// OptFlushInterval overrides how often the wheel-mode flush loop pushes
+// batched delivered/attempted writes to the DB. Defaults to 1s.
+func OptFlushInterval(d time.Duration) WorkerOption {
+	return func(w *Worker) {
+		w.flushInterval = d
+	}
+}
+
 type Worker struct {
 	identity string
 	mgr      *model.Manager
@@ -67,6 +101,10 @@ type Worker struct {
 	pollingInterval time.Duration
 	hookTimeout     time.Duration
 	batchSize       int
+
+	prefetchWindow       time.Duration
+	dispatchTickInterval time.Duration
+	flushInterval        time.Duration
 
 	http *http.Transport
 
@@ -97,6 +135,9 @@ func (w *Worker) Vars() WorkerVars {
 
 func (w *Worker) Run(ctx context.Context) error {
 	defer w.deregister(ctx)
+	if w.prefetchWindow > 0 {
+		return w.runWheelMode(ctx)
+	}
 	tick := time.NewTicker(w.tickIntervalOrDefault())
 	defer tick.Stop()
 	for {
@@ -415,4 +456,326 @@ func (w *Worker) metadata(t *model.Timer) (output http.Header) {
 		output.Set(key, value)
 	}
 	return
+}
+
+//
+// wheel-mode dispatch
+//
+
+// wheelLeaseSafetyMargin is added to the prefetch window to size the
+// per-claim lease. The wheel must be allowed to hold a timer for the
+// full window plus dispatch + retry budget; if the worker dies, the
+// reclaim path picks the row back up after this many seconds elapse
+// past the original "due-by" cutoff.
+const wheelLeaseSafetyMargin = 30 * time.Second
+
+// wheelSlotHeadroom is how many extra one-second slots the wheel keeps
+// on top of the prefetch window. Inserts straddling a tick boundary
+// land in slots ahead of the cursor; the headroom guarantees we can't
+// hash an inserted timer into the slot the cursor just emptied.
+const wheelSlotHeadroom = 4
+
+const defaultDispatchTickInterval = 1 * time.Second
+
+func (w *Worker) dispatchTickIntervalOrDefault() time.Duration {
+	if w.dispatchTickInterval > 0 {
+		return w.dispatchTickInterval
+	}
+	return defaultDispatchTickInterval
+}
+
+const defaultFlushInterval = 1 * time.Second
+
+func (w *Worker) flushIntervalOrDefault() time.Duration {
+	if w.flushInterval > 0 {
+		return w.flushInterval
+	}
+	return defaultFlushInterval
+}
+
+// dispatchResult is the outcome of a single hook firing, queued onto the
+// flushLoop's results channel. Either DeliveredAt is set (success) or
+// StatusCode/RemoteErr describe the failure to record.
+type dispatchResult struct {
+	ID          uuid.UUID
+	DeliveredAt time.Time
+	StatusCode  uint32
+	RemoteErr   error
+	Failed      bool
+}
+
+func (w *Worker) runWheelMode(ctx context.Context) error {
+	logger := log.GetLogger(ctx)
+	now := time.Now().UTC()
+	slotCount := max(int(w.prefetchWindow/time.Second)+wheelSlotHeadroom, 8)
+	wh := wheel.New(slotCount, now)
+	results := make(chan dispatchResult, 4096)
+
+	logger.Info("worker; wheel mode start",
+		log.Duration("prefetch_window", w.prefetchWindow),
+		log.Int("slot_count", slotCount),
+		log.Duration("dispatch_tick", w.dispatchTickIntervalOrDefault()),
+		log.Duration("flush_interval", w.flushIntervalOrDefault()),
+	)
+
+	var loops sync.WaitGroup
+	loops.Add(3)
+	go func() { defer loops.Done(); w.prefetchLoop(ctx, wh) }()
+	go func() {
+		defer loops.Done()
+		// dispatch is the sole producer; closing results when it
+		// returns lets flushLoop drain in-flight sends and exit
+		// cleanly without losing the last batch's outcomes.
+		defer close(results)
+		w.dispatchLoop(ctx, wh, results)
+	}()
+	go func() { defer loops.Done(); w.flushLoop(ctx, results) }()
+	loops.Wait()
+
+	w.shutdownWheel(wh)
+	return nil
+}
+
+// prefetchLoop is the only loop that talks to the DB on the read path.
+// Each tick claims everything due within the prefetch window and parks
+// it in the wheel; a follow-up prefetch deduplicates on timer ID so an
+// overlapping window can't double-fire a row.
+func (w *Worker) prefetchLoop(ctx context.Context, wh *wheel.Wheel) {
+	tick := time.NewTicker(w.tickIntervalOrDefault())
+	defer tick.Stop()
+	logger := log.GetLogger(ctx)
+
+	prefetch := func() {
+		nowUTC := time.Now().UTC()
+		if err := w.mgr.WorkerSeen(ctx, w.identity, nowUTC); err != nil {
+			logger.Error("worker; failed to update last seen", log.Any("err", err))
+			return
+		}
+		shardLo, shardHi := w.currentShardBand(ctx, nowUTC)
+		windowSeconds := int(w.prefetchWindow / time.Second)
+		leaseSeconds := windowSeconds + int(wheelLeaseSafetyMargin/time.Second)
+		// Scale the claim batch so we hit the same wall-clock throughput
+		// regardless of how wide the window is. Without the scale the
+		// batch caps at the same count we previously claimed every 5s,
+		// starving the wheel when the window is large.
+		batch := w.batchSizeOrDefault()
+		if windowSeconds > int(w.tickIntervalOrDefault()/time.Second) {
+			scale := windowSeconds / int(w.tickIntervalOrDefault()/time.Second)
+			if scale > 1 {
+				batch = batch * scale
+			}
+		}
+
+		timers, err := w.mgr.GetDueTimersWindowed(ctx, w.identity, nowUTC, batch, shardLo, shardHi, windowSeconds, leaseSeconds)
+		if err != nil {
+			logger.Error("worker; failed to prefetch timers", log.Any("err", err))
+			return
+		}
+		var inserted, dropped int
+		for i := range timers {
+			if wh.Insert(&timers[i]) {
+				inserted++
+			} else {
+				dropped++
+			}
+		}
+		if inserted > 0 || dropped > 0 {
+			logger.Info("worker; wheel prefetch",
+				log.Int("inserted", inserted),
+				log.Int("dropped", dropped),
+				log.Int("wheel_len", wh.Len()),
+			)
+		}
+	}
+
+	prefetch() // run once immediately so the wheel isn't empty for the first dispatch tick.
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			prefetch()
+		}
+	}
+}
+
+// dispatchLoop drives the wheel cursor and fires hooks for every timer
+// whose slot has come due. Concurrency is bounded by parallelism so a
+// large slot can't fan out beyond the configured limit; results stream
+// onto a channel for the flush loop to batch.
+func (w *Worker) dispatchLoop(ctx context.Context, wh *wheel.Wheel, results chan<- dispatchResult) {
+	tick := time.NewTicker(w.dispatchTickIntervalOrDefault())
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			fired := wh.Advance(time.Now().UTC())
+			if len(fired) == 0 {
+				continue
+			}
+			b, _ := async.BatchContext(ctx)
+			b.SetLimit(w.parallelismOrDefault())
+			for i := range fired {
+				t := fired[i]
+				b.Go(func() error {
+					w.fireOne(ctx, t, results)
+					return nil
+				})
+			}
+			_ = b.Wait()
+		}
+	}
+}
+
+// fireOne issues the hook request for t and pushes the outcome onto
+// results. The flush loop is responsible for the corresponding DB
+// write; failures and successes alike must always reach the channel
+// so a stuck flush can't silently lose attempts.
+func (w *Worker) fireOne(ctx context.Context, t *model.Timer, results chan<- dispatchResult) {
+	var internalErr, remoteErr error
+	defer func() {
+		w.timersProcessed.Add(1)
+		if remoteErr != nil {
+			w.timersProcessedRemoteError.Add(1)
+		}
+		if internalErr != nil {
+			w.timersProcessedInternalError.Add(1)
+		}
+	}()
+
+	started := time.Now()
+	res, remoteErr := w.makeHookRequest(t)
+	if remoteErr != nil || res.StatusCode >= http.StatusBadRequest {
+		var statusCode int
+		if res != nil {
+			statusCode = res.StatusCode
+		}
+		if remoteErr != nil {
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: %w", remoteErr), w.logAttrs(t,
+				log.String("err_type", "remote"),
+				log.Duration("elapsed", time.Since(started)),
+			)...)
+		} else {
+			log.GetLogger(ctx).Err(fmt.Errorf("worker; failed to deliver to remote: non-200 status code returned %d", statusCode), w.logAttrs(t,
+				log.String("err_type", "remote"),
+				log.Duration("elapsed", time.Since(started)),
+			)...)
+		}
+		select {
+		case results <- dispatchResult{ID: t.ID, Failed: true, StatusCode: uint32(statusCode), RemoteErr: remoteErr}:
+		case <-ctx.Done():
+		}
+		return
+	}
+	select {
+	case results <- dispatchResult{ID: t.ID, DeliveredAt: time.Now().UTC()}:
+	case <-ctx.Done():
+	}
+}
+
+// flushLoop coalesces dispatch results into batched DB writes. Success
+// rows go through BulkMarkDelivered; failures group by (status, err)
+// so each "family" of failure costs one UPDATE per flush instead of
+// one per timer. Termination is keyed off the results channel closing
+// (dispatch loop is the sole producer) rather than ctx.Done — that
+// guarantees the very last batch's outcomes always reach the DB even
+// if shutdown races with a tick boundary.
+func (w *Worker) flushLoop(ctx context.Context, results <-chan dispatchResult) {
+	tick := time.NewTicker(w.flushIntervalOrDefault())
+	defer tick.Stop()
+
+	var delivered []uuid.UUID
+	type failureKey struct {
+		status uint32
+		errMsg string
+	}
+	failures := map[failureKey][]uuid.UUID{}
+	logger := log.GetLogger(ctx)
+
+	flush := func() {
+		if len(delivered) > 0 {
+			w.bulkMarkDeliveredWithRetry(ctx, delivered)
+			logger.Info("worker; flushed deliveries", log.Int("count", len(delivered)))
+			delivered = delivered[:0]
+		}
+		for k, ids := range failures {
+			if len(ids) == 0 {
+				continue
+			}
+			err := retryDBWrite(ctx, "worker; failed to mark batch attempted", func(c context.Context) error {
+				return w.mgr.BulkMarkAttempted(c, k.status, errOrNil(k.errMsg), time.Now().UTC(), ids)
+			})
+			if err == nil {
+				logger.Info("worker; flushed attempts",
+					log.Int("count", len(ids)),
+					log.Int("status", int(k.status)),
+				)
+			}
+			delete(failures, k)
+		}
+	}
+
+	for {
+		select {
+		case r, ok := <-results:
+			if !ok {
+				flush()
+				return
+			}
+			if r.Failed {
+				k := failureKey{status: r.StatusCode, errMsg: errString(r.RemoteErr)}
+				failures[k] = append(failures[k], r.ID)
+			} else {
+				delivered = append(delivered, r.ID)
+			}
+		case <-tick.C:
+			flush()
+		}
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// errOrNil reverses errString — used when handing the grouped-failure
+// message back to BulkMarkAttempted, which itself stringifies. Wrapping
+// in a synthetic error keeps the manager's signature unchanged.
+func errOrNil(s string) error {
+	if s == "" {
+		return nil
+	}
+	return errString_synthetic{msg: s}
+}
+
+type errString_synthetic struct{ msg string }
+
+func (e errString_synthetic) Error() string { return e.msg }
+
+// shutdownWheel is invoked after Run's loops exit. It tries, on a fresh
+// context, to relinquish the wheel's still-claimed contents so peers
+// can pick them up immediately on their next prefetch instead of
+// waiting the full lease out.
+func (w *Worker) shutdownWheel(wh *wheel.Wheel) {
+	left := wh.DrainAll()
+	if len(left) == 0 {
+		return
+	}
+	ids := make([]uuid.UUID, 0, len(left))
+	for _, t := range left {
+		ids = append(ids, t.ID)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := w.mgr.BulkRelinquish(ctx, w.identity, time.Now().UTC(), ids); err != nil {
+		log.GetLogger(ctx).Error("worker; failed to relinquish wheel on shutdown",
+			log.Int("count", len(ids)),
+			log.Any("err", err),
+		)
+	}
 }

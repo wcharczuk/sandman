@@ -55,10 +55,20 @@ var entrypoint = apputil.DBEntryPoint[workerConfig]{
 		if err := modelMgr.Initialize(ctx); err != nil {
 			return err
 		}
-		w := worker.New(cfg.Hostname, modelMgr,
+		workerOpts := []worker.WorkerOption{
 			worker.OptBatchSize(cfg.Worker.BatchSizeOrDefault()),
 			worker.OptPollingInterval(cfg.Worker.PollingIntervalOrDefault()),
-		)
+		}
+		if cfg.Worker.PrefetchWindow > 0 {
+			workerOpts = append(workerOpts, worker.OptPrefetchWindow(cfg.Worker.PrefetchWindow))
+		}
+		if cfg.Worker.DispatchTickInterval > 0 {
+			workerOpts = append(workerOpts, worker.OptDispatchTickInterval(cfg.Worker.DispatchTickInterval))
+		}
+		if cfg.Worker.FlushInterval > 0 {
+			workerOpts = append(workerOpts, worker.OptFlushInterval(cfg.Worker.FlushInterval))
+		}
+		w := worker.New(cfg.Hostname, modelMgr, workerOpts...)
 		if cfg.ExpvarListenAddr != "" {
 			w.Vars().Publish()
 			go func() {
