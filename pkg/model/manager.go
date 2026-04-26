@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/db/dbutil"
-	"go.charczuk.com/sdk/selector"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/db"
+	"sandman/pkg/db/dbutil"
+	"sandman/pkg/selector"
+	"sandman/pkg/uuid"
 )
 
 type Manager struct {

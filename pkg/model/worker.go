@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"go.charczuk.com/sdk/db"
+	"sandman/pkg/db"
 )
 
 var (

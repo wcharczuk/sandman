@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"go.charczuk.com/sdk/apputil"
-	"go.charczuk.com/sdk/configutil"
+	"sandman/pkg/apputil"
+	"sandman/pkg/configutil"
 )
 
 type Config struct {

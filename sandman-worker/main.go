@@ -10,13 +10,13 @@ import (
 	"sandman/pkg/model"
 	"sandman/pkg/worker"
 
-	"go.charczuk.com/sdk/apputil"
-	"go.charczuk.com/sdk/configutil"
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/db/dbutil"
-	"go.charczuk.com/sdk/db/migration"
-	"go.charczuk.com/sdk/log"
-	"go.charczuk.com/sdk/slant"
+	"sandman/pkg/apputil"
+	"sandman/pkg/configutil"
+	"sandman/pkg/db"
+	"sandman/pkg/db/dbutil"
+	"sandman/pkg/db/migration"
+	"sandman/pkg/log"
+	"sandman/pkg/slant"
 )
 
 var (

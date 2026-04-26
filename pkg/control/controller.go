@@ -5,7 +5,7 @@ import (
 	"math"
 	"time"
 
-	"go.charczuk.com/sdk/log"
+	"sandman/pkg/log"
 
 	"sandman/pkg/model"
 )

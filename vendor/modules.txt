@@ -40,34 +40,6 @@ github.com/rjeczalik/notify
 # github.com/urfave/cli/v3 v3.0.0-alpha9.1
 ## explicit; go 1.18
 github.com/urfave/cli/v3
-# go.charczuk.com v0.0.0-00010101000000-000000000000 => ../go.charczuk.com
-## explicit; go 1.25.0
-go.charczuk.com/sdk/apputil
-go.charczuk.com/sdk/assert
-go.charczuk.com/sdk/async
-go.charczuk.com/sdk/cliutil
-go.charczuk.com/sdk/configmeta
-go.charczuk.com/sdk/configutil
-go.charczuk.com/sdk/cron
-go.charczuk.com/sdk/db
-go.charczuk.com/sdk/db/dbgen
-go.charczuk.com/sdk/db/dbutil
-go.charczuk.com/sdk/db/migration
-go.charczuk.com/sdk/errutil
-go.charczuk.com/sdk/graceful
-go.charczuk.com/sdk/log
-go.charczuk.com/sdk/mathutil
-go.charczuk.com/sdk/oauth
-go.charczuk.com/sdk/proxyproto
-go.charczuk.com/sdk/r2
-go.charczuk.com/sdk/selector
-go.charczuk.com/sdk/slant
-go.charczuk.com/sdk/stringutil
-go.charczuk.com/sdk/supervisor
-go.charczuk.com/sdk/testutil
-go.charczuk.com/sdk/uuid
-go.charczuk.com/sdk/viewutil
-go.charczuk.com/sdk/web
 # golang.org/x/crypto v0.41.0
 ## explicit; go 1.23.0
 golang.org/x/crypto/pbkdf2
@@ -211,4 +183,3 @@ google.golang.org/protobuf/types/known/timestamppb
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# go.charczuk.com => ../go.charczuk.com

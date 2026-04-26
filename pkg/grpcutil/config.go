@@ -3,7 +3,7 @@ package grpcutil
 import (
 	"context"
 
-	"go.charczuk.com/sdk/configutil"
+	"sandman/pkg/configutil"
 )
 
 // Config holds configuration options.

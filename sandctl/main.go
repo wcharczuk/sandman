@@ -5,7 +5,7 @@ import (
 	"os"
 	"sandman/sandctl/commands"
 
-	"go.charczuk.com/sdk/cliutil"
+	"sandman/pkg/cliutil"
 )
 
 func main() {

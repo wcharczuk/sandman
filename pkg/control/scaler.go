@@ -3,7 +3,7 @@ package control
 import (
 	"context"
 
-	"go.charczuk.com/sdk/log"
+	"sandman/pkg/log"
 )
 
 // Scaler is the interface for applying scale changes.

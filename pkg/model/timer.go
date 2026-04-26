@@ -4,8 +4,8 @@ import (
 	"maps"
 	"time"
 
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/db"
+	"sandman/pkg/uuid"
 )
 
 var (

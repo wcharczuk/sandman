@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"go.charczuk.com/sdk/log"
+	"sandman/pkg/log"
 )
 
 //

@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
-	"go.charczuk.com/sdk/async"
-	"go.charczuk.com/sdk/log"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/async"
+	"sandman/pkg/log"
+	"sandman/pkg/uuid"
 
 	"sandman/pkg/model"
 	"sandman/pkg/utils"

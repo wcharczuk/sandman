@@ -8,11 +8,11 @@ import (
 
 	"google.golang.org/grpc"
 
-	"go.charczuk.com/sdk/apputil"
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/db/dbutil"
-	"go.charczuk.com/sdk/log"
-	"go.charczuk.com/sdk/slant"
+	"sandman/pkg/apputil"
+	"sandman/pkg/db"
+	"sandman/pkg/db/dbutil"
+	"sandman/pkg/log"
+	"sandman/pkg/slant"
 
 	"sandman/pkg/config"
 	"sandman/pkg/grpcutil"

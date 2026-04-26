@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"go.charczuk.com/sdk/assert"
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/db/dbutil"
-	"go.charczuk.com/sdk/testutil"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/assert"
+	"sandman/pkg/db"
+	"sandman/pkg/db/dbutil"
+	"sandman/pkg/testutil"
+	"sandman/pkg/uuid"
 )
 
 func Test_Manager_GetDueTimers_byDueUTC(t *testing.T) {

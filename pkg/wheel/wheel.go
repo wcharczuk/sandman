@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"sandman/pkg/model"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/uuid"
 )
 
 // New returns a wheel with slotCount one-second slots whose cursor is

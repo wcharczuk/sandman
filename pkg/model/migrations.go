@@ -1,8 +1,8 @@
 package model
 
 import (
-	"go.charczuk.com/sdk/db/dbgen"
-	"go.charczuk.com/sdk/db/migration"
+	"sandman/pkg/db/dbgen"
+	"sandman/pkg/db/migration"
 )
 
 func Migrations(opts ...migration.SuiteOption) *migration.Suite {

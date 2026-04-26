@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"go.charczuk.com/sdk/log"
-	"go.charczuk.com/sdk/supervisor"
+	"sandman/pkg/log"
+	"sandman/pkg/supervisor"
 )
 
 // ForkScaler manages worker replicas as forked `go run` processes.

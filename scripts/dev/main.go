@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"go.charczuk.com/sdk/cliutil"
-	"go.charczuk.com/sdk/graceful"
-	"go.charczuk.com/sdk/supervisor"
+	"sandman/pkg/cliutil"
+	"sandman/pkg/graceful"
+	"sandman/pkg/supervisor"
 )
 
 var services cliutil.FlagStrings

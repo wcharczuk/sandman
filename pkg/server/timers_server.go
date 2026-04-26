@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"go.charczuk.com/sdk/selector"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/selector"
+	"sandman/pkg/uuid"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

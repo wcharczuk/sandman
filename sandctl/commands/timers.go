@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"go.charczuk.com/sdk/cliutil"
+	"sandman/pkg/cliutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"

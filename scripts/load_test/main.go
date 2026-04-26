@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
-	"go.charczuk.com/sdk/cliutil"
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/cliutil"
+	"sandman/pkg/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 

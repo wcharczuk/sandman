@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"go.charczuk.com/sdk/db"
-	"go.charczuk.com/sdk/log"
-	"go.charczuk.com/sdk/testutil"
+	"sandman/pkg/db"
+	"sandman/pkg/log"
+	"sandman/pkg/testutil"
 )
 
 func TestMain(m *testing.M) {

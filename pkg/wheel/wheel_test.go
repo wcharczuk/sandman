@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"go.charczuk.com/sdk/uuid"
+	"sandman/pkg/uuid"
 
 	"sandman/pkg/model"
 )
