@@ -166,13 +166,17 @@ var queryGetTimerByName = fmt.Sprintf(`SELECT %s FROM %s WHERE name = $1`, db.Co
 func (m Manager) GetTimerByName(ctx context.Context, name string) (out Timer, found bool, err error) {
 	rows, err := m.getTimerByName.QueryContext(ctx, name)
 	if err != nil {
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
 		err = rows.Err()
 		return
 	}
-	if !rows.Next() {
+	if err = db.PopulateInOrder(&out, rows, timerColumns); err != nil {
 		return
 	}
-	err = db.PopulateInOrder(&out, rows, timerColumns)
+	found = true
 	return
 }
 
@@ -190,6 +194,7 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 	if err != nil {
 		return
 	}
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var t Timer
 		if err = db.PopulateInOrder(&t, rows, timerColumns); err != nil {
@@ -203,6 +208,7 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 			output = append(output, t)
 		}
 	}
+	err = rows.Err()
 	return
 }
 
@@ -234,11 +240,20 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		AND (
 			retry_utc IS NULL OR (retry_utc IS NOT NULL AND retry_utc < $2)
 		)
-		AND attempt < 5
-		AND delivered_utc IS NULL
+		-- attempt < 5 AND delivered_utc IS NULL are the partial index's
+		-- predicate, so already implied for any row this scan returns.
+		-- Restating them here forces the planner to fetch attempt and
+		-- delivered_utc, which aren't stored, causing an index-join
+		-- (and FOR UPDATE locks on every primary row touched). Dropping
+		-- the redundant predicates keeps the candidates scan index-only.
 	ORDER BY shard ASC, due_utc ASC
 	LIMIT $3 * 2
-	FOR UPDATE SKIP LOCKED
+	-- No FOR UPDATE here: locking at scan level locks every row scanned,
+	-- including rows the filter above rejects, and those locks block the
+	-- worker's own concurrent BulkMarkDelivered. Shard banding already
+	-- keeps workers on disjoint candidate sets; the assigned_until_utc
+	-- guard duplicated in the outer UPDATE's WHERE below catches the
+	-- rare overlap during a band shift.
 ), selected AS (
 	SELECT
 		id
@@ -264,6 +279,7 @@ SET
 	, retry_utc = $2::timestamp + interval '5 minutes'
 WHERE
 	id in (SELECT id FROM selected)
+	AND (assigned_until_utc IS NULL OR assigned_until_utc < $2)
 RETURNING %[2]s
 `, timerTableName, db.ColumnNamesCSV(timerColumns))
 
@@ -307,6 +323,7 @@ func (m Manager) GetDueTimersWindowed(ctx context.Context, workerIdentity string
 	if err != nil {
 		return
 	}
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var t Timer
 		if err = db.PopulateInOrder(&t, rows, timerColumns); err != nil {
@@ -314,6 +331,7 @@ func (m Manager) GetDueTimersWindowed(ctx context.Context, workerIdentity string
 		}
 		output = append(output, t)
 	}
+	err = rows.Err()
 	return
 }
 
@@ -483,6 +501,7 @@ func (m Manager) GetWorkers(ctx context.Context, asOf time.Time) (output []Worke
 	if err != nil {
 		return
 	}
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var t Worker
 		if err = db.PopulateInOrder(&t, rows, workerColumns); err != nil {
@@ -490,6 +509,7 @@ func (m Manager) GetWorkers(ctx context.Context, asOf time.Time) (output []Worke
 		}
 		output = append(output, t)
 	}
+	err = rows.Err()
 	return
 }
 

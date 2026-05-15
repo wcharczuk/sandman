@@ -37,7 +37,15 @@ func Migrations(opts ...migration.SuiteOption) *migration.Suite {
 				migration.NewGroupWithStep(
 					migration.IndexNotExists("timers", "ix_timers_shard_due_utc_pending"),
 					migration.Statements(
-						`CREATE INDEX ix_timers_shard_due_utc_pending ON timers (shard, due_utc) WHERE delivered_utc IS NULL AND attempt < 5`,
+						// STORING the lease/retry/priority columns lets the
+						// claim CTE evaluate its assigned_until/retry filter
+						// directly off the index. Without this the planner
+						// inserts a lookup-join to the primary index, which
+						// under FOR UPDATE means we lock every candidate
+						// row just to discover it's already leased — and
+						// that lock blocks the concurrent BulkMarkDelivered
+						// UPDATE on the same primary range.
+						`CREATE INDEX ix_timers_shard_due_utc_pending ON timers (shard, due_utc) STORING (assigned_until_utc, retry_utc, priority) WHERE delivered_utc IS NULL AND attempt < 5`,
 						`ALTER INDEX timers@ix_timers_shard_due_utc_pending SPLIT EVENLY FROM (0) TO (4294967296) INTO 16`,
 						`ALTER INDEX timers@ix_timers_shard_due_utc_pending SCATTER`,
 					),

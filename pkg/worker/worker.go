@@ -438,7 +438,15 @@ func (w *Worker) makeHookRequest(t *model.Timer) (*http.Response, error) {
 	client := &http.Client{
 		Transport: w.http,
 	}
-	return client.Do(req)
+	res, err := client.Do(req)
+	if res != nil {
+		// Drain and close so the underlying TCP connection is returned
+		// to the Transport's idle pool. Without this every fired timer
+		// burns a fresh connection and we exhaust local fds under load.
+		_, _ = io.Copy(io.Discard, res.Body)
+		_ = res.Body.Close()
+	}
+	return res, err
 }
 
 func (w *Worker) logAttrs(t *model.Timer, extra ...any) []any {
@@ -559,8 +567,12 @@ func (w *Worker) prefetchLoop(ctx context.Context, wh *wheel.Wheel) {
 		// batch caps at the same count we previously claimed every 5s,
 		// starving the wheel when the window is large.
 		batch := w.batchSizeOrDefault()
-		if windowSeconds > int(w.tickIntervalOrDefault()/time.Second) {
-			scale := windowSeconds / int(w.tickIntervalOrDefault()/time.Second)
+		tickSeconds := int(w.tickIntervalOrDefault() / time.Second)
+		if tickSeconds < 1 {
+			tickSeconds = 1
+		}
+		if windowSeconds > tickSeconds {
+			scale := windowSeconds / tickSeconds
 			if scale > 1 {
 				batch = batch * scale
 			}
@@ -646,7 +658,8 @@ func (w *Worker) fireOne(ctx context.Context, t *model.Timer, results chan<- dis
 	}()
 
 	started := time.Now()
-	res, remoteErr := w.makeHookRequest(t)
+	var res *http.Response
+	res, remoteErr = w.makeHookRequest(t)
 	if remoteErr != nil || res.StatusCode >= http.StatusBadRequest {
 		var statusCode int
 		if res != nil {

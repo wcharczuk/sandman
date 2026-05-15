@@ -1,10 +1,19 @@
-grpc:
+server:
   bindAddr: :8833
 
 dbHosts:
   - 127.0.0.1:26257
+  - 127.0.0.1:26258
+  - 127.0.0.1:26259
 
 db:
   database: sandman
   username: root
   sslMode: disable
+
+worker:
+  batch_size: 500
+  polling_interval: 5s
+  prefetch_window: 30s
+  dispatch_tick_interval: 250ms
+  flush_interval: 500ms

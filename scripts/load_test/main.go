@@ -94,7 +94,7 @@ var command = &cli.Command{
 			Hook: viewmodel.Hook{
 				URL:     cmd.String("hook-url"),
 				Method:  cmd.String("hook-method"),
-				Headers: cmd.StringMap("hook-headers"),
+				Headers: cmd.StringMap("hook-header"),
 				Body:    hookBodyData,
 			},
 		}
@@ -116,15 +116,15 @@ var command = &cli.Command{
 		var x uint64
 		var start = time.Now()
 		for {
+			if (count > 0 && x >= count) || (duration > 0 && time.Since(start) >= duration) {
+				break
+			}
 			timer.Name = uuid.V4().String()
 			timer.ShardKey = fmt.Sprintf("uid_%04d", x)
 			timer.DueUTC = time.Now().UTC().Add(randomDueIn())
 			_, err := c.CreateTimer(ctx, timer.ToProto())
 			if err != nil {
 				slog.Error("load test; create timer failed", slog.Any("err", err))
-			}
-			if (count > 0 && x >= count) || (duration > 0 && time.Since(start) >= duration) {
-				break
 			}
 			if x%100 == 0 {
 				slog.Info("load-test progressing", slog.Int("count", int(x)))

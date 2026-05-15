@@ -38,7 +38,7 @@ func (s TimerServer) CreateTimer(ctx context.Context, t *sandmanv1.Timer) (*sand
 	if _, err := url.Parse(t.GetHookUrl()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid `hook_url`; could not parse url")
 	}
-	if strings.ToLower(t.GetHookMethod()) == http.MethodGet && len(t.GetHookBody()) > 0 {
+	if strings.EqualFold(t.GetHookMethod(), http.MethodGet) && len(t.GetHookBody()) > 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid hook; `hook_method` cannot be GET with a body specified")
 	}
 	nowUTC := time.Now().UTC()
@@ -139,7 +139,7 @@ func (s TimerServer) DeleteTimer(ctx context.Context, args *sandmanv1.DeleteTime
 			return nil, status.Error(codes.NotFound, fmt.Sprintf("timer with name %q not found", name))
 		}
 	}
-	return nil, nil
+	return &emptypb.Empty{}, nil
 }
 
 //
