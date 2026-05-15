@@ -39,9 +39,12 @@ func (s *ForkScaler) SetDesiredScale(ctx context.Context, desired int32) error {
 	if desired > current {
 		for i := current; i < desired; i++ {
 			hostname := fmt.Sprintf("worker-%d", i)
-			cmd := exec.Command("go", "run", "./sandman-worker",
-				"--hostname", hostname,
-			)
+			var cmd *exec.Cmd
+			if bin := os.Getenv("SANDMAN_WORKER_BIN"); bin != "" {
+				cmd = exec.Command(bin, "--hostname", hostname)
+			} else {
+				cmd = exec.Command("go", "run", "./sandman-worker", "--hostname", hostname)
+			}
 			cmd.Stdout = supervisor.PrefixWriter{Prefix: fmt.Sprintf("%s| ", hostname), Writer: os.Stderr}
 			cmd.Stderr = supervisor.PrefixWriter{Prefix: fmt.Sprintf("%s| ", hostname), Writer: os.Stderr}
 			if err := cmd.Start(); err != nil {
