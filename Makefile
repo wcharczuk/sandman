@@ -34,6 +34,9 @@ migrate:
 run:
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml go run scripts/dev/main.go
 
+start-cluster:
+	@go run scripts/start-cluster/main.go
+
 run-worker-00:
 	@CONFIG_PATH=$(PREFIX)/_config/config.yml EXPVAR_LISTEN_ADDR=:8082 HOSTNAME=worker-00 go run sandman-worker/main.go
 
