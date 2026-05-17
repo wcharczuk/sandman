@@ -578,6 +578,14 @@ func (w *Worker) prefetchLoop(ctx context.Context, wh *wheel.Wheel) {
 			}
 		}
 
+		// Intentionally NOT wrapped in retryDBWrite: the claim CTE's UPDATE
+		// input scan carries an implicit `for-update,nowait-retry` lock
+		// policy, and mikoshi handles lock-not-available with internal
+		// backoff + priority escalation. A client-side cancel-at-10s and
+		// immediate re-run defeats that and turns a transient band-overlap
+		// (workers starting at different times and briefly seeing different
+		// memberships) into a livelock. If mikoshi exhausts its own retry
+		// budget, the error surfaces here and we just skip this tick.
 		timers, err := w.mgr.GetDueTimersWindowed(ctx, w.identity, nowUTC, batch, shardLo, shardHi, windowSeconds, leaseSeconds)
 		if err != nil {
 			logger.Error("worker; failed to prefetch timers", log.Any("err", err))

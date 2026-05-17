@@ -226,6 +226,14 @@ func (m Manager) GetTimersDueBetween(ctx context.Context, after, before time.Tim
 //
 // The shuffle-shard priority boost still uses asOf alone so the
 // per-tick fairness ordering is unchanged when window > 0.
+//
+// The candidates scan is index-only (STORING covers assigned_until_utc,
+// retry_utc, priority) and non-locking. Under READ COMMITTED, mikoshi
+// only validates locked + written spans at commit, so concurrent
+// BulkMarkDelivered writes to rows the scan touched-but-filtered-out
+// don't force a 40001. The assigned_until_utc guard is re-checked in the
+// outer UPDATE's WHERE so a row another worker claimed during a band
+// shift is a no-op rather than a double-claim.
 var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 	SELECT
 		id, priority, shard, due_utc
@@ -240,20 +248,10 @@ var queryGetDueTimers = fmt.Sprintf(`WITH candidates AS (
 		AND (
 			retry_utc IS NULL OR (retry_utc IS NOT NULL AND retry_utc < $2)
 		)
-		-- attempt < 5 AND delivered_utc IS NULL are the partial index's
-		-- predicate, so already implied for any row this scan returns.
-		-- Restating them here forces the planner to fetch attempt and
-		-- delivered_utc, which aren't stored, causing an index-join
-		-- (and FOR UPDATE locks on every primary row touched). Dropping
-		-- the redundant predicates keeps the candidates scan index-only.
+		-- attempt < 5 AND delivered_utc IS NULL are implied by the
+		-- partial index predicate; mikoshi's optimizer elides them.
 	ORDER BY shard ASC, due_utc ASC
 	LIMIT $3 * 2
-	-- No FOR UPDATE here: locking at scan level locks every row scanned,
-	-- including rows the filter above rejects, and those locks block the
-	-- worker's own concurrent BulkMarkDelivered. Shard banding already
-	-- keeps workers on disjoint candidate sets; the assigned_until_utc
-	-- guard duplicated in the outer UPDATE's WHERE below catches the
-	-- rare overlap during a band shift.
 ), selected AS (
 	SELECT
 		id
